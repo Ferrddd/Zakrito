@@ -1,2 +1,5 @@
 *.pdf
-data/*
+data/raw/*
+data/converted/*
+!data/raw/.gitkeep
+!data/converted/.gitkeep
