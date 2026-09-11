@@ -1,0 +1,30 @@
+name: Code Quality (Lint)
+
+on:
+  pull_request:
+    branches: [ main, master, dev ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    env:
+      PYTHONDONTWRITEBYTECODE: 1
+      RUFF_NO_CACHE: 1
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Linters via Makefile
+        run: make lint PYTHON=python
