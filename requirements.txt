@@ -1,0 +1,5 @@
+python-dotenv
+pandas
+pydantic-settings
+ruff
+mypy

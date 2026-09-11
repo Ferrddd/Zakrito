@@ -1,5 +1,12 @@
+*.env
+**/__pycache__/
 *.pdf
 data/raw/*
 data/converted/*
+.mypy_cache/
+.ruff_cache/
+
+
+
 !data/raw/.gitkeep
 !data/converted/.gitkeep
