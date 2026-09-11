@@ -2,8 +2,8 @@ PYTHON ?= .venv/bin/python
 ROOT_DIR = .
 
 update_venv:
-	pip install --upgrade pip
-	pip install -r requirements.txt
+	$(PYTHON) -m pip install --upgrade pip
+	$(PYTHON) -m pip install -r requirements.txt
 
 copy_env:
 	cat .env.example >> .env
