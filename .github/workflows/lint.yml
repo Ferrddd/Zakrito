@@ -27,4 +27,4 @@ jobs:
           pip install ruff mypy
 
       - name: Run Linters via Makefile
-        run: make lint
+        run: make lint PYTHON=python

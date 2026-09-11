@@ -1,4 +1,4 @@
-PYTHON = .venv/bin/python
+PYTHON ?= .venv/bin/python
 ROOT_DIR = .
 
 update_venv:

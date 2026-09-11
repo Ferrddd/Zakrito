@@ -1,3 +1,3 @@
-from dotenv import load_dotenv
+from config import pipeline_config
 
-load_dotenv()
+settings = pipeline_config.data_pipeline_settings
