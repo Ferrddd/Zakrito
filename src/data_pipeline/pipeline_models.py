@@ -8,6 +8,9 @@ class Data_Pipeline_Settings(BaseSettings):
     raw_data_path: Path = Path("data/raw")
     converted_data_path: Path = Path("data/converted")
 
+    file_avt: Path = Path(f"{raw_data_path}/avt_tags.csv")
+    file_242000: Path = Path(f"{raw_data_path}/242000_tags.csv")
+
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
