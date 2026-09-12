@@ -5,3 +5,4 @@ pydantic-settings
 ruff
 mypy
 pyarrow
+matplotlib
