@@ -1,5 +1,7 @@
 python-dotenv
 pandas
+pandas-stubs
 pydantic-settings
 ruff
 mypy
+pyarrow
