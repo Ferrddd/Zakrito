@@ -11,7 +11,7 @@ class DataPreparer:
     def __init__(self, settings:Data_Pipeline_Settings):
         self.file_avt = settings.file_avt
         self.file_242000 = settings.file_242000
-        self.anomaly_threshold = settings.anomaly_threshold
+        self.file_lims = settings.file_lims
 
     def load_data(self) -> pd.DataFrame:
         df_avt = pd.read_csv(self.file_avt, engine='pyarrow')
@@ -26,13 +26,21 @@ class DataPreparer:
 
         return df
 
-    def is_anomaly(self, row: pd.Series, medians: pd.Series) -> bool:
-        def robust_z(s):
-            med, mad = s.median(), (s - s.median()).abs().median()
-            return (s - med) / (1.4826 * mad + 1e-9)
-        
-        row = row[row.index != "date"] #только столбцы с тэгами
-        z = row.apply(robust_z)
-        downtime_score = (z.abs() > 5).mean(axis=1)   # проверяет отклоняется ли z-score более чем на 5 стандартных отклонений и считает долю датчиков с таким отклонением с в строке
+    def load_lims(self) -> pd.DataFrame:
+        df = pd.read_excel(
+        self.file_lims,
+        header=[0, 1],       # Строка 0 (Установка) и Строка 1 (Показатель) становятся заголовками
+        skiprows=[2, 3]      # Пропускаем строки 2 (единицы измерения) и 3 (статистика "Количество значений:")
+    )
+        new_columns = []
+        for installation, param in df.columns:
+            if str(param).endswith('.1'):
+                new_columns.append((installation, param.replace('.1', ''), 'Value'))
+            else:
+                new_columns.append((installation, param, 'Date'))
 
-        return downtime_score > 0.3
+        df.columns = pd.MultiIndex.from_tuples(new_columns, names=['Установка', 'Показатель', 'Тип'])
+        return df
+
+    # Для демонстрации дописать:
+    # is_anomaly() которая проверяет текущий набор на аномальность

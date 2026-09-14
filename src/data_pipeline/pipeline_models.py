@@ -10,8 +10,7 @@ class Data_Pipeline_Settings(BaseSettings):
 
     file_avt: Path = Path(f"{raw_data_path}/avt_tags.csv")
     file_242000: Path = Path(f"{raw_data_path}/242000_tags.csv")
-
-    anomaly_threshold: float
+    file_lims: Path = Path(f"{raw_data_path}/ЛИМСы 01.01.2023 - н.в_ (2).xlsx")
     
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
