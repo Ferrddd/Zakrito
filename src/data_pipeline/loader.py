@@ -12,6 +12,8 @@ class DataPreparer:
         self.file_avt = settings.file_avt
         self.file_242000 = settings.file_242000
         self.file_lims = settings.file_lims
+        self.file_pac = settings.file_pac
+        self.converted_data_path = settings.converted_data_path
 
     # Работа с csv
     def load_data(self) -> pd.DataFrame:
@@ -39,13 +41,12 @@ class DataPreparer:
         df = df[downtime_score <= settings.anomaly_threshold]
         return df
 
+
     # Работа с таблицами
     def load_lims(self) -> pd.DataFrame:
-        df = pd.read_excel(
-        self.file_lims,
-        header=[0, 1],       # Строка 0 (Установка) и Строка 1 (Показатель) становятся заголовками
-        skiprows=[2, 3]      # Пропускаем строки 2 (единицы измерения) и 3 (статистика "Количество значений:")
-    )
+        df = pd.read_excel(self.file_lims,
+                           header=[0, 1],       # Строка 0 (Установка) и Строка 1 (Показатель) становятся заголовками
+                           skiprows=[2, 3])      # Пропускаем строки 2 (единицы измерения) и 3 (статистика "Количество значений:")
         new_columns = []
         for col in df.columns:
             installation = str(col[0])
@@ -58,6 +59,33 @@ class DataPreparer:
         df.columns = pd.MultiIndex.from_tuples(new_columns, names=['Установка', 'Показатель', 'Тип'])
         return df
 
+    def load_pac(self, sheet_name=0) -> pd.DataFrame:
+        raw = pd.read_excel(self.file_pac, sheet_name=sheet_name, header=None)
+        tags = raw.iloc[0]
+        data = raw.iloc[2:].reset_index(drop=True)  # строка 1 — units, пропускаем
+
+        step = 3  # date, value, разделитель — если разделителей больше/меньше, вернёмся к динамическому варианту
+        frames = {}
+        for start in range(0, len(tags), step):
+            tag_name = tags[start]
+            if pd.isna(tag_name):
+                continue
+            date_col, value_col = start, start + 1
+            block = data.iloc[:, [date_col, value_col]].copy()
+            block.columns = ["date", str(tag_name).strip()]
+            block["date"] = pd.to_datetime(block["date"])
+            block[str(tag_name).strip()] = pd.to_numeric(block.iloc[:, 1], errors="coerce")
+            block = block.dropna(subset=["date"])
+            frames[str(tag_name).strip()] = block
+
+        # мёрдж по дате, а не по позиции строки — outer, чтобы не терять точки ни одного тега
+        wide = None
+        for tag, df in frames.items():
+            wide = df if wide is None else wide.merge(df, on="date", how="outer")
+
+        return wide.sort_values("date").reset_index(drop=True)
+
+
     # Для демонстрации дописать:
     # is_anomaly() которая проверяет текущий набор на аномальность
 
@@ -66,5 +94,11 @@ class DataPreparer:
         df = self.clean_data(df)
         df = self.delete_downtime(df)
         df = self.delete_downtime(df)
+
+        df_pac = self.load_pac()
+
+        df = df.merge(df_pac, how="left")
+
+        df.to_parquet(f"{self.converted_data_path}/telemetry+pac.parquet", compression="brotli")
 
         return df
