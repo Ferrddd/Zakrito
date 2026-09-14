@@ -59,8 +59,8 @@ class DataPreparer:
         df.columns = pd.MultiIndex.from_tuples(new_columns, names=['Установка', 'Показатель', 'Тип'])
         return df
 
-    def load_pac(self, sheet_name=0) -> pd.DataFrame:
-        raw = pd.read_excel(self.file_pac, sheet_name=sheet_name, header=None)
+    def load_pac(self) -> pd.DataFrame:
+        raw = pd.read_excel(self.file_pac, header=None)
         tags = raw.iloc[0]
         data = raw.iloc[2:].reset_index(drop=True)  # строка 1 — units, пропускаем
 
@@ -80,9 +80,10 @@ class DataPreparer:
 
         # мёрдж по дате, а не по позиции строки — outer, чтобы не терять точки ни одного тега
         wide = None
-        for tag, df in frames.items():
+        for df in frames.values():
             wide = df if wide is None else wide.merge(df, on="date", how="outer")
 
+        assert wide is not None
         return wide.sort_values("date").reset_index(drop=True)
 
 
