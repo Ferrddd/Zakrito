@@ -1,0 +1,61 @@
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    margin: 0;
+    background:linear-gradient(to left top, #0b0f19 5%, #400d7b 14%, #6e0bd0 28%, #430d81 43%, #2f0e5c 55%, #0b0f19 74%);
+    background-size: 200% 200%;
+    animation: moveGradient 20s ease infinite alternate;
+}
+header {
+    height: 50px;
+    background-color: black;
+}
+main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: minmax(200px, auto);
+    gap: 40px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    background: transparent;
+    padding: 20px;
+    
+}
+@keyframes moveGradient{
+    0% {
+        background-position: 0% 0%;
+    }
+    100%{
+        background-position: 100% 100%;
+    }
+}
+main > div {
+    border: 2px;
+    border-radius: 5%;
+    border-style: solid;
+    border-color: #FFDE4D;
+    box-shadow: 0 4px 10px #FFDE4D;
+    min-height: 500px;
+    
+    background-color: #1d263f63;
+    
+}
+main > div:hover {
+    border-color: #ffeb94;
+    box-shadow: 2px 5px 12px #FFDE4D;
+}
+.predict_unit{
+    grid-column: span 2;
+}
+.telemetry_block{
+    grid-column: span 2;
+}
+.agent_tracer{
+    grid-column: span 4;
+}
+.dashbords{
+    grid-column: span 4;
+}
