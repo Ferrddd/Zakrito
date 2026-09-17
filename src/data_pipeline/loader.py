@@ -233,20 +233,22 @@ class DataPreparer:
                         100 * series.isna().mean())
         return df
  
-    # ----------------------------------------------------------------- ЛИМС
+ # ----------------------------------------------------------------- ЛИМС
     def load_lims(self) -> pd.DataFrame:
         raw = pd.read_excel(self.s.file_lims, header=[0, 1], skiprows=[2, 3])
         columns = []
-        for installation, param in raw.columns:
-            param = str(param)
+        for col in raw.columns:
+            # Безопасно извлекаем уровни MultiIndex через индексы кортежа
+            installation = str(col[0])
+            param = str(col[1])
             if param.endswith(".1"):
-                columns.append((str(installation), param[:-2], "Value"))
+                columns.append((installation, param[:-2], "Value"))
             else:
-                columns.append((str(installation), param, "Date"))
+                columns.append((installation, param, "Date"))
         raw.columns = pd.MultiIndex.from_tuples(
             columns, names=["Установка", "Показатель", "Тип"])
         return raw
- 
+
     def lims_to_long(self, wide: pd.DataFrame) -> pd.DataFrame:
         """Широкий ЛИМС -> длинный: date | installation | indicator | value.
  
@@ -255,7 +257,8 @@ class DataPreparer:
         требование ТЗ.
         """
         records = []
-        pairs = {(inst, ind) for inst, ind, _ in wide.columns}
+        # Извлекаем уникальные пары установок и показателей по индексам кортежа
+        pairs = {(str(col[0]), str(col[1])) for col in wide.columns}
         for inst, ind in sorted(pairs):
             try:
                 dates = pd.to_datetime(wide[(inst, ind, "Date")], errors="coerce")
@@ -268,7 +271,7 @@ class DataPreparer:
             block["installation"] = inst
             block["indicator"] = ind
             records.append(block)
- 
+
         long = pd.concat(records, ignore_index=True)
         return long.sort_values("date").reset_index(drop=True)
  

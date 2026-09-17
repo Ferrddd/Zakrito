@@ -10,3 +10,4 @@ openpyxl
 pytest
 lightgbm
 scikit-learn
+scikit-learn-stubs

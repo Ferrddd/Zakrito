@@ -28,7 +28,7 @@ class Fold:
     test_start: pd.Timestamp
     test_end: pd.Timestamp
 
-    def masks(self, index: pd.DatetimeIndex) -> tuple[np.ndarray, np.ndarray]:
+    def masks(self, index: pd.Index) -> tuple[np.ndarray, np.ndarray]:
         train = (index >= self.train_start) & (index <= self.train_end)
         test = (index >= self.test_start) & (index <= self.test_end)
         return train, test
@@ -45,13 +45,16 @@ def embargo_delta(max_window_points: int, horizon_points: int,
 
 
 def holdout_split(index: pd.DatetimeIndex, test_size: str = "120D",
-                  embargo: pd.Timedelta = pd.Timedelta("1D")) -> Fold:
+                  embargo: pd.Timedelta | None = None) -> Fold:
     """Финальный holdout: последние test_size по времени.
 
     По умолчанию последние ~4 месяца — апрель-август 2026. Туда попадают и
     период с повышенной серой (апрель 2026), и заморозка ПАК (июнь-июль 2026),
     то есть оба сложных демо-сценария оцениваются честно, вне обучения.
     """
+    if embargo is None:
+        embargo = pd.Timedelta("1D")
+
     end = index.max()
     test_start = end - pd.Timedelta(test_size)
     train_end = test_start - embargo
@@ -62,7 +65,7 @@ def holdout_split(index: pd.DatetimeIndex, test_size: str = "120D",
 
 def rolling_origin_folds(index: pd.DatetimeIndex, n_folds: int = 4,
                          test_size: str = "60D",
-                         embargo: pd.Timedelta = pd.Timedelta("1D"),
+                         embargo: pd.Timedelta | None = None,
                          expanding: bool = True,
                          holdout: Fold | None = None,
                          freq: str = "10min") -> list[Fold]:
@@ -76,6 +79,9 @@ def rolling_origin_folds(index: pd.DatetimeIndex, n_folds: int = 4,
 
     Если передан holdout, валидация строится строго левее него.
     """
+    if embargo is None:
+        embargo = pd.Timedelta("1D")
+
     limit = holdout.train_end if holdout else index.max()
     span = pd.Timedelta(test_size)
     folds: list[Fold] = []
@@ -129,15 +135,14 @@ def assert_no_leakage(df: pd.DataFrame, fold: Fold, feature_cols: list[str],
 
     # ни один признак не должен коррелировать с таргетом как копия
     sample = df.loc[train_mask, feature_cols + [target_col]].dropna()
-    if len(sample) > 1000:
-        sample = sample.sample(5000, random_state=0) if len(sample) > 5000 else sample
+    if len(sample) > 1:
         corr = sample[feature_cols].corrwith(sample[target_col]).abs()
         suspicious = corr[corr > 0.98]
         assert suspicious.empty, f"подозрение на утечку: {suspicious.to_dict()}"
 
 
 def train_matrix(df: pd.DataFrame, fold: Fold, feature_cols: list[str],
-                 target_col: str, require_valid: bool = True):
+                 target_col: str, require_valid: bool = True) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
     """Возвращает X_train, y_train, X_test, y_test.
 
     Именно здесь, и только здесь, происходит фильтрация по is_valid: признаки уже

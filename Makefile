@@ -1,6 +1,8 @@
 PYTHON ?= .venv/bin/python
 ROOT_DIR = .
 
+export PYTHONDONTWRITEBYTECODE=1
+
 install:
 	python3.12 -m venv .venv
 	$(PYTHON) -m pip install --upgrade pip
@@ -20,6 +22,9 @@ lint-mypy:
 	$(PYTHON) -m mypy --disallow-untyped-defs --cache-dir=/dev/null $(ROOT_DIR)
 lint: lint-ruff lint-mypy
 
+#Тесты
+test:
+	$(PYTHON) -m pytest -v
 #Запуски
 data_pipeline:
 	$(PYTHON) -m scripts.run_pipeline

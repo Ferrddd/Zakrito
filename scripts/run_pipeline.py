@@ -61,12 +61,14 @@ def add_features(df: pd.DataFrame, horizon: int) -> tuple[pd.DataFrame, list[str
     return df, cols
 
 
-def make_splits(df: pd.DataFrame, horizon: int):
+def make_splits(df: pd.DataFrame, horizon: int) -> tuple[S.Fold, list[S.Fold], pd.Timedelta]:
     """Holdout + rolling-origin CV с эмбарго, без утечки."""
+
+    dt_index = pd.DatetimeIndex(df.index)
     embargo = S.embargo_delta(max_window_points=72, horizon_points=horizon)
-    holdout = S.holdout_split(df.index, test_size="120D", embargo=embargo)
+    holdout = S.holdout_split(dt_index, test_size="120D", embargo=embargo)
     cv_folds = S.rolling_origin_folds(
-        df.index, n_folds=4, test_size="60D", embargo=embargo,
+        dt_index, n_folds=4, test_size="60D", embargo=embargo,
         expanding=True, holdout=holdout,
     )
     return holdout, cv_folds, embargo

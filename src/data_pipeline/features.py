@@ -136,12 +136,12 @@ def feature_columns(df: pd.DataFrame, horizon_points: int,
 
     cols = []
     for c in df.columns:
-        if c in service or c.startswith("target_") or c.startswith("mask_"):
+        if c in service or c.startswith(("target_", "mask_")):
             continue
         if df[c].dtype.kind not in "if":
             continue
 
-        is_analyzer = c.startswith(banned_prefixes) or c.startswith(VIRTUAL_ANALYZER_TAGS)
+        is_analyzer = c.startswith(banned_prefixes + tuple(VIRTUAL_ANALYZER_TAGS))
         if is_analyzer:
             if blind:
                 continue

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 
 import numpy as np
@@ -6,14 +8,13 @@ import pytest
 
 from src.data_pipeline.loader import (
     DataPreparer,
-    # DataPreparer methods used via instance
     _mask_min_duration,
     frozen_runs,
     robust_z,
 )
 
 
-def test_robust_z_variable_and_constant():
+def test_robust_z_variable_and_constant() -> None:
     df = pd.DataFrame({"a": [1, 2, 3, 4, 5], "b": [10, 10, 10, 10, 10]})
     z = robust_z(df)
     # variable column should have median approximately 0
@@ -22,7 +23,7 @@ def test_robust_z_variable_and_constant():
     assert z["b"].isna().all()
 
 
-def test_frozen_runs_detects_long_runs_and_ignores_nans():
+def test_frozen_runs_detects_long_runs_and_ignores_nans() -> None:
     s = pd.Series([1, 1, 1, 2, 2, 2, np.nan, 3, 3])
     res = frozen_runs(s, min_points=3)
     # first six points are runs of length >=3, nans and short runs are False
@@ -30,13 +31,13 @@ def test_frozen_runs_detects_long_runs_and_ignores_nans():
     assert res.tolist() == expected
 
 
-def test_mask_min_duration_filters_short_spikes():
+def test_mask_min_duration_filters_short_spikes() -> None:
     mask = pd.Series([False, True, True, False, True, True, True, False])
     out = _mask_min_duration(mask, min_points=3)
     assert out.tolist() == [False, False, False, False, True, True, True, False]
 
 
-def test_drop_service_columns_removes_unnamed_and_constant():
+def test_drop_service_columns_removes_unnamed_and_constant() -> None:
     df = pd.DataFrame({
         "date": pd.date_range("2021-01-01", periods=3),
         "Unnamed: 0": [1, 2, 3],
@@ -49,7 +50,7 @@ def test_drop_service_columns_removes_unnamed_and_constant():
     assert "val" in res.columns
 
 
-def test_normalize_grid_inserts_missing_timestamps_and_on_grid_flag():
+def test_normalize_grid_inserts_missing_timestamps_and_on_grid_flag() -> None:
     prep = DataPreparer()
     df = pd.DataFrame({
         "date": [
@@ -70,7 +71,7 @@ def test_normalize_grid_inserts_missing_timestamps_and_on_grid_flag():
     assert out.loc[pd.Timestamp("2021-01-01 00:20"), "on_grid"] == True
 
 
-def test_attach_lims_merges_last_result_and_age_minutes():
+def test_attach_lims_merges_last_result_and_age_minutes() -> None:
     prep = DataPreparer()
     # left dataframe (telemetry) with datetime index
     left = pd.DataFrame({"date": [

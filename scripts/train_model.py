@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any, cast
 
 import lightgbm as lgb
 import numpy as np
@@ -43,21 +44,21 @@ VIOLATION_LIMIT = F.SULFUR_LIMIT_PPM  # 10 ppm
 
 USE_EARLY_STOPPING = True
 
-LGB_PARAMS = dict(
-    objective="regression",
-    metric="mae",
-    n_estimators=2000,
-    learning_rate=0.02,
-    num_leaves=31,
-    min_child_samples=50,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    reg_lambda=1.0,
-    random_state=0,
-    n_jobs=-1,
-    force_col_wise=True,
-    verbosity=-1,
-)
+LGB_PARAMS: dict[str, Any] = {
+    "objective": "regression",
+    "metric": "mae",
+    "n_estimators": 2000,
+    "learning_rate": 0.02,
+    "num_leaves": 31,
+    "min_child_samples": 50,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_lambda": 1.0,
+    "random_state": 0,
+    "n_jobs": -1,
+    "force_col_wise": True,
+    "verbosity": -1,
+}
 
 
 def load_fold(name: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -73,7 +74,7 @@ def split_xy(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     return X, y
 
 
-def fit_predict(train: pd.DataFrame, test: pd.DataFrame, fold_name: str = "unknown") -> dict:
+def fit_predict(train: pd.DataFrame, test: pd.DataFrame, fold_name: str = "unknown") -> dict[str, Any]:
     Xtr, ytr = split_xy(train)
     Xte, yte = split_xy(test)
 
@@ -87,15 +88,15 @@ def fit_predict(train: pd.DataFrame, test: pd.DataFrame, fold_name: str = "unkno
     logger.info(f"[{fold_name}] Запуск обучения. Train shape: {Xtr_np.shape}, Test shape: {Xte_np.shape}")
 
     model = lgb.LGBMRegressor(**LGB_PARAMS)
-    fit_kwargs = dict(eval_metric="mae")
+    fit_kwargs: dict[str, Any] = {"eval_metric": "mae"}
     
     if USE_EARLY_STOPPING:
         fit_kwargs["callbacks"] = [lgb.early_stopping(100, verbose=False), lgb.log_evaluation(0)]
         
     try:
-        model.fit(Xtr_np, ytr_np, eval_X=Xte_np, eval_y=yte_np, **fit_kwargs)
+        model.fit(Xtr_np, ytr_np, eval_X=Xte_np, eval_y=yte_np, **fit_kwargs)  # type: ignore[arg-type]
     except TypeError:
-        model.fit(Xtr_np, ytr_np, eval_set=[(Xte_np, yte_np)], **fit_kwargs)
+        model.fit(Xtr_np, ytr_np, eval_set=[(Xte_np, yte_np)], **fit_kwargs)  # type: ignore[arg-type]
 
     best_iter = model.best_iteration_ if USE_EARLY_STOPPING else None
     pred = model.predict(Xte_np, num_iteration=best_iter)
@@ -103,9 +104,12 @@ def fit_predict(train: pd.DataFrame, test: pd.DataFrame, fold_name: str = "unkno
     mae = mean_absolute_error(yte_np, pred)
     rmse = float(np.sqrt(mean_squared_error(yte_np, pred)))
 
-    y_true_violation = (yte_np > VIOLATION_LIMIT).astype(int)
+    # Явно приводим к numpy массиву для MyPy
+    yte_arr = np.asarray(yte_np)
+    y_true_violation = (yte_arr > VIOLATION_LIMIT).astype(int)
 
-    metrics = {
+    # Явно указываем тип dict[str, Any], чтобы туда поместились вложенные словари
+    metrics: dict[str, Any] = {
         "mae": float(mae),
         "rmse": float(rmse),
         "n_test": len(yte_np),
@@ -114,6 +118,7 @@ def fit_predict(train: pd.DataFrame, test: pd.DataFrame, fold_name: str = "unkno
     
     if len(np.unique(y_true_violation)) > 1:
         # 1. Считаем стандартные метрики при жестком пороге 10.0 ppm
+        pred = np.asarray(pred)
         pred_violation_strict = (pred > VIOLATION_LIMIT).astype(int)
         metrics["strict_10ppm"] = {
             "precision": float(precision_score(y_true_violation, pred_violation_strict, zero_division=0)),
@@ -145,10 +150,11 @@ def fit_predict(train: pd.DataFrame, test: pd.DataFrame, fold_name: str = "unkno
             }
         })
 
+        cal_dict = cast(dict[str, float], metrics["calibrated"])
         logger.info(
             f"[{fold_name}] Жесткий порог (>10.0 ppm): Recall={metrics['strict_10ppm']['recall']:.3f} | "
-            f"Калиброванный порог (>{best_threshold:.2f} ppm): Recall={metrics['calibrated']['recall']:.3f}, "
-            f"Precision={metrics['calibrated']['precision']:.3f}, F1={metrics['calibrated']['f1']:.3f}"
+            f"Калиброванный порог (>{best_threshold:.2f} ppm): Recall={cal_dict['recall']:.3f}, "
+            f"Precision={cal_dict['precision']:.3f}, F1={cal_dict['f1']:.3f}"
         )
     else:
         logger.warning(f"[{fold_name}] В тестовой выборке только один класс. Метрики классификации пропущены.")

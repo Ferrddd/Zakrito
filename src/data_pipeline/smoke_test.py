@@ -7,11 +7,9 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 from src.data_pipeline import features as F
 from src.data_pipeline import splitting as S
 from src.data_pipeline.loader import DataPreparer
-from src.data_pipeline.pipeline_models import DataPipelineSettings
+from src.data_pipeline.pipeline_models import data_pipeline_settings
 
-s = DataPipelineSettings(raw_data_path="/mnt/user-data/uploads",
-                         name_pac="Выгрузка_ПАК_01_01_2023_-_н_в_.xlsx")
-dp = DataPreparer(s)
+dp = DataPreparer(data_pipeline_settings)
 
 # --- реальный ПАК
 pac = dp.load_pac()
@@ -55,8 +53,9 @@ print("leak check: analyzer in features?", [c for c in cols if c.startswith(("T6
 
 emb = S.embargo_delta(72, 6)
 print("embargo:", emb)
-ho = S.holdout_split(df.index, "120D", emb)
-folds = S.rolling_origin_folds(df.index, 4, "60D", emb, holdout=ho)
+dt_index = pd.DatetimeIndex(df.index)
+ho = S.holdout_split(dt_index, "120D", emb)
+folds = S.rolling_origin_folds(dt_index, 4, "60D", emb, holdout=ho)
 for f in folds + [ho]: print(" ", f)
 S.assert_no_leakage(df, ho, cols, "target_6", 6)
 Xtr, ytr, Xte, yte = S.train_matrix(df, ho, cols, "target_6")
