@@ -1,8 +1,10 @@
 PYTHON ?= .venv/bin/python
 ROOT_DIR = .
 
+export PYTHONDONTWRITEBYTECODE=1
+
 install:
-	python3 -m venv .venv
+	python3.12 -m venv .venv
 	$(PYTHON) -m pip install --upgrade pip
 	$(PYTHON) -m pip install -r requirements.txt
 
@@ -20,6 +22,12 @@ lint-mypy:
 	$(PYTHON) -m mypy --disallow-untyped-defs --cache-dir=/dev/null $(ROOT_DIR)
 lint: lint-ruff lint-mypy
 
+#Тесты
+test:
+	$(PYTHON) -m pytest -v
 #Запуски
 data_pipeline:
-	$(PYTHON) -m src.data_pipeline.loader
+	$(PYTHON) -m scripts.run_pipeline
+
+train_model:
+	$(PYTHON) -m scripts.train_model
