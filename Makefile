@@ -2,7 +2,7 @@ PYTHON ?= .venv/bin/python
 ROOT_DIR = .
 
 install:
-	python3 -m venv .venv
+	python3.12 -m venv .venv
 	$(PYTHON) -m pip install --upgrade pip
 	$(PYTHON) -m pip install -r requirements.txt
 
@@ -22,4 +22,7 @@ lint: lint-ruff lint-mypy
 
 #Запуски
 data_pipeline:
-	$(PYTHON) -m src.data_pipeline.loader
+	$(PYTHON) -m scripts.run_pipeline
+
+train_model:
+	$(PYTHON) -m scripts.train_model

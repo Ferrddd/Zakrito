@@ -7,3 +7,6 @@ mypy
 pyarrow
 matplotlib
 openpyxl
+pytest
+lightgbm
+scikit-learn
