@@ -23,11 +23,12 @@ def time_index() -> pd.DatetimeIndex:
 @pytest.fixture
 def df_large() -> pd.DataFrame:
     """Большой датафрейм (частота 10 минут) для тестирования утечек."""
+    rng = np.random.default_rng(42)
     idx = pd.date_range("2026-01-01", periods=2000, freq="10min")
     df = pd.DataFrame(index=idx)
     
-    df["feature_1"] = np.random.randn(2000)
-    df["target"] = df["feature_1"] * 0.5 + np.random.randn(2000) * 0.1
+    df["feature_1"] = rng.standard_normal(2000)
+    df["target"] = df["feature_1"] * 0.5 + rng.standard_normal(2000) * 1.0
     df["leakage_feature"] = df["target"]
     df["is_valid"] = True
     
