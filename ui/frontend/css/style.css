@@ -79,7 +79,7 @@ main > div:hover {
 }
 .dynemic-parameters-grid {
     display: grid;
-    grid-template-columns: repeat(4,1fr);
+    grid-template-columns: 1fr 2fr 2fr 1fr;
     gap: 12px 8px;
     color: #ffffff;
     align-items: center;
@@ -109,7 +109,7 @@ main > div:hover {
 }
 .kips-table {
     display: grid;
-    grid-template-columns: repeat(4,1fr);
+    grid-template-columns: 1fr 2fr 1fr 1fr;
     gap: 12px 8px;
     align-items: center;
 }
