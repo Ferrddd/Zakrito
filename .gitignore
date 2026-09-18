@@ -9,3 +9,7 @@ data/raw/*
 data/converted/
 !data/raw/.gitkeep
 !data/converted/historical_stats.csv
+!data/converted/.gitkeep
+**/node_modules/
+
+
