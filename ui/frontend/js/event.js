@@ -12,7 +12,7 @@ export class EventBus {
         this.events[eventName].push(callback);
     }
 
-    // Метод вызова события с передачей данных (payload)
+    // Метод вызова события с передачей данных
     emit(eventName, payload) {
         if (this.events[eventName]) {
             // Запускаем все функции, подписанные на это событие
