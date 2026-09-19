@@ -1,10 +1,23 @@
 """Построение признаков и таргета для агента качества.
 
-Два инварианта, которые здесь соблюдаются жёстко:
+Признаки — вся телеметрия (АВТ + 24-2000), а не только "управляемые" теги:
+агенту качества для прогноза всё равно, крутит ли этим оператор — важна
+только предиктивность. Управляемость нужна только monotone-ограничению
+классификатора и агенту оптимизации (config/controllable_tags.yaml).
+
+Единственное, что реально запрещено — чёрный список утечки таргета
+(sulfur_analyzer_tags в конфиге): это те же измерения серы, что и сам
+таргет, просто другим прибором. Всё остальное — обычный признак.
+
+Инварианты, которые здесь соблюдаются жёстко:
 
 1. Все лаги и окна считаются ВНУТРИ block_id. Окно не может пересечь останов.
-2. В признаки для прогноза не попадают поточные анализаторы серы с лагом
-   меньше горизонта прогноза — иначе модель просто читает таргет.
+2. В признаки для прогноза не попадают анализаторы серы (и сам таргет) с
+   лагом меньше горизонта прогноза; в blind-режиме — вообще никакие.
+3. Чёрный список сравнивается по ТОЧНОМУ имени базовой колонки (до '__'),
+   а не по префиксу: иначе 'W7' задел бы 'W70', а 'T6' — 'T61'.
+4. В blind-режиме нет ни одной колонки из выгрузки ПАК (имена вида
+   '24-2000:D15') и ЛИМС: если ПАК недоступен, их нет и на инференсе.
 """
 
 from __future__ import annotations
@@ -14,97 +27,149 @@ import logging
 import numpy as np
 import pandas as pd
 
-from src.data_pipeline.loader import SULFUR_ANALYZER_TAGS, VIRTUAL_ANALYZER_TAGS
+from src.data_pipeline.feature_config import FeatureConfig, resolve_column_name
 
 logger = logging.getLogger(__name__)
 
-SULFUR_TAG = "24-2000:Mg.Sulfur"
-D15_TAG = "24-2000:D15"
-SULFUR_LIMIT_PPM = 10.0
+# Служебные колонки пайплайна — никогда не признаки и не лагируются.
+SERVICE_COLUMNS = {"block_id", "is_valid", "on_grid", "anomaly_share", ""}
+SERVICE_PREFIXES = ("mask_", "target_")
 
-# Управляющие кандидаты по гидроочистке (справочник КИП, лист 24-2000).
-# Буквы в именах не соответствуют физическому смыслу — проверено по справочнику.
-CONTROLS = {
-    "T5_hdt": "Р-201, температура ГСС на выходе",
-    "P8_hdt": "Р-202, температура ГСС на входе",
-    "F15_hdt": "Расход квенча в Р-202",
-    "T11_hdt": "Расход сырья на установку (массовый)",
-    "F2_hdt": "Циркуляционный ВСГ от ЦК-201",
-    "P24_hdt": "Расход свежего ВСГ с КЦА",
-}
+# Монотонная рампа времени внутри блока: её лаги и std — это просто другое
+# представление calendar time, а не физика. Оставляем сырой признак, но
+# запрещаем лагировать — см. raw_feature_candidates.
+LAG_BANNED_COLS = {"hours_since_block_start", "is_startup"}
 
-# Признаки состояния оборудования (нужны агенту надёжности, полезны и качеству)
-CONDITION = {
-    "W10_hdt": "Перепад давления Р-202 — прокси закоксовывания",
-    "F19_hdt": "Давление на входе Р-202",
-}
+
+def _hdt_col(columns: pd.Index, tag_id: str) -> str | None:
+    """Реальное имя колонки тега 24-2000 ('T5' -> 'T5' или 'T5_hdt')."""
+    try:
+        return resolve_column_name(f"{tag_id}_hdt", columns)
+    except KeyError:
+        return None
 
 
 def add_engineered(df: pd.DataFrame) -> pd.DataFrame:
-    """Физические отношения. Считаются построчно, разрывов не пересекают."""
+    """Физические отношения по фиксированным тегам гидроочистки (24-2000).
+
+    Имена тегов захардкожены осознанно: это конкретные формулы для конкретного
+    контура (Р-201/Р-202). Реальные имена колонок определяются по df (у тегов,
+    которые есть только в 24-2000, суффикса _hdt нет).
+    """
     out = df.copy()
     eps = 1e-6
+    cols = out.columns
 
-    if {"T5_hdt", "P8_hdt"} <= set(out.columns):
-        # WABT-прокси: среднее по доступным температурам слоёв
-        out["wabt"] = out[["T5_hdt", "P8_hdt"]].mean(axis=1)
-        out["dt_reactors"] = out["P8_hdt"] - out["T5_hdt"]
+    t5 = _hdt_col(cols, "T5")
+    p24 = _hdt_col(cols, "P24")
+    feed_col = _hdt_col(cols, "T11") or _hdt_col(cols, "F26")
 
-    if {"F2_hdt", "T11_hdt"} <= set(out.columns):
-        out["gas_to_feed"] = out["F2_hdt"] / (out["T11_hdt"] + eps)
+    if t5:
+        out["wabt"] = out[t5]  # единственная доступная температура слоя пока одна
+    if feed_col and p24:
+        out["h2_to_feed"] = out[p24] / (out[feed_col] + eps)
+    if feed_col:
+        out["load_rel"] = out[feed_col] / (out[feed_col].median() + eps)
 
-    if {"P24_hdt", "T11_hdt"} <= set(out.columns):
-        out["h2_makeup_to_feed"] = out["P24_hdt"] / (out["T11_hdt"] + eps)
+    missing = [n for n, c in (("T5", t5), ("P24", p24), ("T11/F26", feed_col)) if not c]
+    if missing:
+        logger.warning("add_engineered: нет колонок для %s — часть инженерных "
+                       "признаков не создана", missing)
+    logger.info("add_engineered: T5=%s P24=%s feed=%s", t5, p24, feed_col)
 
-    if {"F15_hdt", "T11_hdt"} <= set(out.columns):
-        out["quench_to_feed"] = out["F15_hdt"] / (out["T11_hdt"] + eps)
+    if "hours_since_block_start" in out.columns:
+        out["is_startup"] = (out["hours_since_block_start"] < 15).astype(float)
 
-    if "T11_hdt" in out.columns:
-        # LHSV-прокси: загрузка относительно медианной
-        out["load_rel"] = out["T11_hdt"] / (out["T11_hdt"].median() + eps)
+    return out
 
+
+def raw_feature_candidates(df: pd.DataFrame, cfg: FeatureConfig) -> list[str]:
+    """Все числовые колонки телеметрии, которые можно лагировать.
+
+    Исключены только служебные колонки пайплайна и сам таргет с его
+    метаданными (__bad/__frozen/__age_min) — таргет и его свежесть это не
+    признак, а то, что мы предсказываем и по чему фильтруем валидность.
+    Анализаторы серы (T6/W7/P13) сюда ВХОДЯТ — они лагируются на общих
+    основаниях, а фильтрует их уже feature_columns() по флагу blind.
+    """
+    target_related = {cfg.target_tag} | {c for c in df.columns
+                                         if c.startswith(f"{cfg.target_tag}__")}
+    cols = []
+    for c in df.columns:
+        if c in SERVICE_COLUMNS or c in target_related:
+            continue
+        if c.startswith(SERVICE_PREFIXES):
+            continue
+        if df[c].dtype.kind not in "if":
+            continue
+        if c in LAG_BANNED_COLS:
+            # Разрешаем использовать сырой признак напрямую (он попадёт в
+            # feature_columns), но не лагируем: лаг монотонной рампы — это
+            # просто другое имя для того же calendar time.
+            continue
+        cols.append(c)
+    return cols
+
+
+def _lag_one_column(block_id: pd.Series, series: pd.Series, col: str,
+                    lags: tuple[int, ...], windows: tuple[int, ...]) -> dict[str, pd.Series]:
+    g = series.groupby(block_id, dropna=False)
+    out = {}
+    for lag in lags:
+        out[f"{col}__lag{lag}"] = g.shift(lag)
+    for win in windows:
+        rolled = g.rolling(win, min_periods=max(2, win // 2))
+        out[f"{col}__mean{win}"] = rolled.mean().reset_index(level=0, drop=True)
+        out[f"{col}__std{win}"] = rolled.std().reset_index(level=0, drop=True)
+        out[f"{col}__delta{win}"] = series - g.shift(win)
     return out
 
 
 def add_lag_features(df: pd.DataFrame, columns: list[str],
                      lags: tuple[int, ...] = (3, 6, 12, 18),
-                     windows: tuple[int, ...] = (6, 18, 72)) -> pd.DataFrame:
+                     windows: tuple[int, ...] = (6, 18, 72),
+                     n_jobs: int = -1) -> pd.DataFrame:
     """Лаги и окна по block_id. Шаг сетки 10 мин: lag=6 -> час назад.
 
     Окна 6 / 18 / 72 точки = 1 / 3 / 12 часов. Диапазон подбирается под мёртвое
-    время: оцени его кросс-корреляцией d(T5) против d(серы) и сдвинь сетку лагов
-    так, чтобы пик попал внутрь.
+    время: оцени его кросс-корреляцией d(тег) против d(серы) и сдвинь сетку
+    лагов так, чтобы пик попал внутрь.
+
+    Считается по колонкам параллельно (joblib, процессы): groupby/rolling в
+    pandas однопоточны сами по себе.
     """
-    out = df.copy()
-    g = out.groupby("block_id", dropna=False)
-    new = {}
+    from joblib import Parallel, delayed
 
-    for col in columns:
-        if col not in out.columns:
-            logger.warning("Нет колонки %s, пропускаю", col)
-            continue
-        s = out[col]
-        for lag in lags:
-            new[f"{col}__lag{lag}"] = g[col].shift(lag)
-        for win in windows:
-            rolled = g[col].rolling(win, min_periods=max(2, win // 2))
-            new[f"{col}__mean{win}"] = rolled.mean().reset_index(level=0, drop=True)
-            new[f"{col}__std{win}"] = rolled.std().reset_index(level=0, drop=True)
-            # скорость изменения: текущее минус значение win точек назад
-            new[f"{col}__delta{win}"] = s - g[col].shift(win)
+    columns = list(dict.fromkeys(columns))  # без дублей, порядок сохраняется
+    existing = [c for c in columns if c in df.columns]
+    missing = set(columns) - set(existing)
+    if missing:
+        logger.warning("Нет колонок %s, пропускаю", sorted(missing))
 
-    return pd.concat([out, pd.DataFrame(new, index=out.index)], axis=1)
+    block_id = df["block_id"]
+    results = Parallel(n_jobs=n_jobs, prefer="processes")(
+        delayed(_lag_one_column)(block_id, df[col], col, lags, windows)
+        for col in existing
+    )
+    new: dict[str, pd.Series] = {}
+    for r in results:
+        new.update(r)
+
+    return pd.concat([df, pd.DataFrame(new, index=df.index)], axis=1)
 
 
-def add_target(df: pd.DataFrame, horizon_points: int,
-               tag: str = SULFUR_TAG) -> pd.DataFrame:
+def add_target(df: pd.DataFrame, horizon_points: int, cfg: FeatureConfig) -> pd.DataFrame:
     """Таргет: значение анализатора через horizon_points шагов вперёд.
 
     Сдвиг делается внутри block_id, поэтому последняя точка перед остановом не
     получит таргет из точки после запуска. Недостоверные измерения ПАК
     (заморозка / выход за диапазон) в таргет не попадают — становятся NaN.
+
+    Односторонний порог (value > limit): подходит для серы. Для двустороннего
+    допуска (напр. плотность, limit_min/limit_max) эта функция пока не годится.
     """
     out = df.copy()
+    tag = cfg.target_tag
     bad_col = f"{tag}__bad"
     clean = out[tag].where(~out[bad_col]) if bad_col in out.columns else out[tag]
     out["_clean_target_src"] = clean
@@ -113,7 +178,7 @@ def add_target(df: pd.DataFrame, horizon_points: int,
     out[f"target_{horizon_points}"] = g.shift(-horizon_points)
     values = out[f"target_{horizon_points}"]
     out[f"target_violation_{horizon_points}"] = np.where(
-        values.isna(), np.nan, (values > SULFUR_LIMIT_PPM).astype(float))
+        values.isna(), np.nan, (values > cfg.target_limit).astype(float))
 
     out = out.drop(columns=["_clean_target_src"])
     logger.info("Таргет H=%d: %d размеченных строк, доля нарушений %.3f",
@@ -122,27 +187,36 @@ def add_target(df: pd.DataFrame, horizon_points: int,
     return out
 
 
-def feature_columns(df: pd.DataFrame, horizon_points: int,
+def _base_name(col: str) -> str:
+    """'T5__lag6' -> 'T5'; '24-2000:Mg.Sulfur__bad' -> '24-2000:Mg.Sulfur'."""
+    return col.split("__")[0]
+
+
+def _is_pak_or_lims(col: str) -> bool:
+    return ":" in _base_name(col) or col.startswith("lims_")
+
+
+def feature_columns(df: pd.DataFrame, horizon_points: int, cfg: FeatureConfig,
                     blind: bool = True) -> list[str]:
     """Список признаков с защитой от утечки.
 
-    blind=True — модель вообще не видит анализаторы серы (режим «ПАК умер»).
-    blind=False — разрешены лаги анализаторов, но только >= горизонта прогноза:
-    при H=6 лаг 3 означал бы знание значения на 30 минут вперёд относительно
-    момента принятия решения.
+    blind=True — модель не видит анализаторы серы, сам таргет и вообще
+    ничего из выгрузки ПАК/ЛИМС (режим «ПАК и КИП-анализаторы серы
+    недоступны»). blind=False — лаги анализаторов и таргета разрешены, но
+    только >= горизонта прогноза.
     """
-    banned_prefixes = tuple(SULFUR_ANALYZER_TAGS) + (SULFUR_TAG,)
-    service = {"block_id", "is_valid", "on_grid", "anomaly_share"}
+    banned_bases = set(cfg.sulfur_analyzer_columns) | {cfg.target_tag}
 
     cols = []
     for c in df.columns:
-        if c in service or c.startswith(("target_", "mask_")):
+        if c in SERVICE_COLUMNS or c.startswith(SERVICE_PREFIXES):
             continue
         if df[c].dtype.kind not in "if":
             continue
+        if blind and _is_pak_or_lims(c):
+            continue
 
-        is_analyzer = c.startswith(banned_prefixes + tuple(VIRTUAL_ANALYZER_TAGS))
-        if is_analyzer:
+        if _base_name(c) in banned_bases:
             if blind:
                 continue
             lag = _parse_lag(c)

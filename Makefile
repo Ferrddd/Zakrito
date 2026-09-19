@@ -29,5 +29,5 @@ test:
 data_pipeline:
 	$(PYTHON) -m scripts.run_pipeline
 
-train_model:
-	$(PYTHON) -m scripts.train_model
+train_quality:
+	$(PYTHON) -m src.agents.quality.train --horizon 6 --skip-cv --force-rebuild
