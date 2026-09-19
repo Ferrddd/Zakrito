@@ -7,10 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-
-  },
-  "devDependencies": {
-    
+    "express": "^5.2.1",
+    "ws": "^8.21.3"
   },
   "keywords": [],
   "type": "commonjs"
