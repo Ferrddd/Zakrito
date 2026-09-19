@@ -1,18 +1,18 @@
 {
   "meta": {
-    "timestamp": "2026-09-12T21:54:30+02:00", //дата и время
-    "cycle_id": "cycle_8472",                 //номер итерации
-    "has_safe_solution": true,                //есть ли безопасное решение(которе рекомендуем)
-    "system_status": "WARNING"                //текущее состяние системы OK/WARNING/CRITICAL
+    "timestamp": "2026-09-12T21:54:30+02:00", 
+    "cycle_id": "cycle_8472",                 
+    "has_safe_solution": true,                
+    "system_status": "WARNING"                
   },
 
-  //входные данные с некоторых тегов(пока что количество неизвестно и вероятно будет динамичным)
+  
   "input_state": {
-    "telemetry_summary": [ //значения датчиков телеметрии - высокий приоритет
+    "telemetry_summary": [ 
       {"tag": "T-101", "name": "Температура АВТ", "value": 350.5, "unit": "°C"},
       {"tag": "T-102", "name": "Температура АВТ 2", "value": 351, "unit": "°C"}
     ],
-    "quality_sources": [ //качсество топлива(лимсы)
+    "quality_sources": [
       {
         "source_type": "LIMS",
         "parameter": "Сера",
@@ -23,11 +23,11 @@
         "is_outdated": true
       }
     ],
-    "data_quality_warnings": ["Анализ серы устарел (более 1 часа)"] //предупреждения(может и не быть)
+    "data_quality_warnings": ["Анализ серы устарел (более 1 часа)"]
   },
 
-  "orchestrator_decision": { //наивысший приоритет
-  //если "has_safe_solution": false -- текст сообщения будет, остальные скорее всего будут просто пустыми словарями с этом пункте
+  "orchestrator_decision": { 
+
     "problem_detected": "Риск нарушения ограничения по содержанию серы в товарном дизельном топливе",
     "recommendation": [
       {
@@ -52,7 +52,7 @@
     "overall_confidence": 0.85
   },
 
-  "alternatives": [ // не уверен что это будет, самый низкий приоритет
+  "alternatives": [ 
     {
       "scenario_id": "alt_1",
       "description": "Изменение режима гидроочистки",
@@ -60,25 +60,25 @@
     }
   ],
 
-  "agents_trace": { //трассировка агентов, 
-    "nodes": [ //агенты
+  "agents_trace": { 
+    "nodes": [ 
       {"id": "quality_agent", "status": "done", "confidence": 0.9},
       {"id": "reliability_agent", "status": "done", "confidence": 0.95},
       {"id": "optimization_agent", "status": "done", "confidence": 0.8},
       {"id": "orchestrator", "status": "done", "confidence": 0.85}
     ],
-    "edges": [ //связи между агентами и подпись к ним
+    "edges": [ 
       {"from": "quality_agent", "to": "optimization_agent", "data_passed": ["forecast_sulfur_10.2"]},
       {"from": "reliability_agent", "to": "optimization_agent", "data_passed": ["risk_index_low"]}
     ],
-    "raw_evaluations": { // промежуточные значения агентов, могут быть любыми в зависимости от агента
+    "raw_evaluations": { 
       "quality_agent": {"forecast": {"sulfur": 10.2}, "risk_of_violation": true},
       "reliability_agent": {"risk_index": 0.2, "mode_permissible": true},
       "optimization_agent": {"generated_scenarios": 3, "valid_scenarios": 1}
     }
   },
 
-  "visualization_data": { //пока что вообще не обращай на это внимание
+  "visualization_data": { 
     "pareto_front": [
       {"x_production": 145, "y_sulfur": 9.5, "is_selected": true},
       {"x_production": 150, "y_sulfur": 10.2, "is_selected": false}
