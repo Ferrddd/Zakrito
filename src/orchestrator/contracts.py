@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -14,6 +15,7 @@ from src.schemas.agents_schemas import (
     ReliabilityAssessment,
     RiskClass,
 )
+from src.schemas.process_state import AgentReport, ProcessState
 
 
 class Scenario(BaseModel):
@@ -63,6 +65,21 @@ class Recommendation(BaseModel):
     rejected: list[str] = Field(default_factory=list)
     stubbed_agents: list[str] = Field(default_factory=list, description="Заглушки, участвовавшие в цикле")
     warnings: list[str] = Field(default_factory=list)
+
+
+@dataclass
+class CycleContext:
+    """Всё, что произошло за один цикл — вход для публикации в UI и аудита."""
+    state: ProcessState
+    quality: AgentReport
+    reliability: ReliabilityAssessment
+    scenarios: list[CheckedScenario]
+    recommendation: Recommendation
+    optimizer_called: bool
+    stubbed: list[str]
+    agent_calls: dict[str, int]
+    elapsed_s: float
+    stats: dict[str, Any] = field(default_factory=dict)
 
 
 # ---- протоколы будущих агентов + заглушки ----------------------------------

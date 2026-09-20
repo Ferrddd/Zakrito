@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +33,7 @@ from src.orchestrator.adapters import (
 from src.orchestrator.contracts import (
     CheckedScenario,
     ConstraintCheck,
+    CycleContext,
     NotConnectedOptimizer,
     NotConnectedReliability,
     OptimizationAgent,
@@ -39,6 +42,7 @@ from src.orchestrator.contracts import (
     Scenario,
     Status,
 )
+from src.orchestrator.stats import CycleStats
 from src.schemas.agents_schemas import (
     OptimizationInput,
     ReliabilityAssessment,
@@ -59,15 +63,35 @@ class Orchestrator:
     def __init__(self, quality: Agent, reliability: ReliabilityAgent | None = None,
                  optimizer: OptimizationAgent | None = None,
                  audit_path: str | Path | None = "data/converted/audit/cycles.jsonl",
-                 max_alternatives: int = 3):
+                 max_alternatives: int = 3,
+                 publisher: Callable[[CycleContext], None] | None = None):
         self.quality = quality
         self.reliability = reliability or NotConnectedReliability()
         self.optimizer = optimizer or NotConnectedOptimizer()
         self.audit_path = Path(audit_path) if audit_path else None
         self.max_alternatives = max_alternatives
+        self.publisher = publisher      # напр. UIPublisher — вызывается после каждого цикла
+        self.stats = CycleStats()
 
     # ------------------------------------------------------------------ цикл
     def run_cycle(self, state: ProcessState) -> Recommendation:
+        t0 = time.perf_counter()
+        try:
+            ctx = self._run_cycle(state)
+        except Exception:
+            self.stats.record(False, time.perf_counter() - t0, {"orchestrator": 1})
+            raise
+        ctx.elapsed_s = time.perf_counter() - t0
+        self.stats.record(True, ctx.elapsed_s, ctx.agent_calls)
+        ctx.stats = self.stats.snapshot()
+        if self.publisher is not None:
+            try:
+                self.publisher(ctx)
+            except Exception:
+                logger.exception("Публикация в UI не удалась")
+        return ctx.recommendation
+
+    def _run_cycle(self, state: ProcessState) -> CycleContext:
         # 1-3. качество
         q_report = self.quality.evaluate(state)
         q_assess = to_quality_assessment(q_report)
@@ -78,6 +102,7 @@ class Orchestrator:
 
         stubs = [a.name for a in (self.reliability, self.optimizer) if getattr(a, "is_stub", False)]
         scenarios: list[CheckedScenario] = []
+        optimizer_called = False
 
         # 5-8. решение
         if q_report.abstain:
@@ -88,13 +113,18 @@ class Orchestrator:
         elif not has_quality_risk(q_report):
             rec = self._stable(state, q_report, q_assess, rel)
         else:
+            optimizer_called = True
             rec, scenarios = self._handle_risk(state, q_report, q_assess, rel, snapshot)
 
         rec.stubbed_agents = stubs
         if stubs:
             rec.warnings.append(f"Заглушки (не реальные агенты): {', '.join(stubs)}")
         self._audit(state, q_report, rel, scenarios, rec)
-        return rec
+        calls = {"quality_agent": 1 + len(scenarios), "reliability_agent": 1,
+                 "optimization_agent": int(optimizer_called), "orchestrator": 1}
+        return CycleContext(state=state, quality=q_report, reliability=rel, scenarios=scenarios,
+                            recommendation=rec, optimizer_called=optimizer_called, stubbed=stubs,
+                            agent_calls={k: v for k, v in calls.items() if v}, elapsed_s=0.0)
 
     # ------------------------------------------------------------------ ветки решения
     def _handle_risk(self, state: ProcessState, q_report: AgentReport, q_assess: Any,
