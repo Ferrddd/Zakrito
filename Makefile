@@ -31,3 +31,13 @@ data_pipeline:
 
 train_quality:
 	$(PYTHON) -m src.agents.quality.train --horizon 6 --skip-cv --force-rebuild
+
+# Агент качества: API и оркестратор
+quality_api:
+	$(PYTHON) -m uvicorn src.agents.quality.api:app --port 8001
+
+orchestrator_demo:
+	$(PYTHON) -m scripts.run_orchestrator --start 2026-06-01 --steps 12
+
+backfill_feed_median:
+	$(PYTHON) -m scripts.backfill_feed_median

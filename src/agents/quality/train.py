@@ -43,6 +43,7 @@ from src.data_pipeline.feature_config import (
     resolve_cfg_columns,
 )
 from src.data_pipeline.features import (
+    _hdt_col,
     add_engineered,
     add_lag_features,
     add_target,
@@ -58,7 +59,12 @@ from src.data_pipeline.splitting import (
     train_matrix,
 )
 from src.utils.config import setup_logging
-from src.utils.metrics import best_threshold, evaluate_quantiles, evaluate_violation, lead_time_minutes
+from src.utils.metrics import (
+    best_threshold,
+    evaluate_quantiles,
+    evaluate_violation,
+    lead_time_minutes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -210,8 +216,11 @@ def _conformal_calibrate(
     preds_val: dict[float, np.ndarray],
     y_val: np.ndarray,
     preds_test: dict[float, np.ndarray],
-) -> dict[float, np.ndarray]:
-    """Сдвигает квантильные прогнозы на константу, подобранную по val,
+) -> tuple[dict[float, np.ndarray], float]:
+    """Возвращает (калиброванные прогнозы, delta). delta сохраняется в calibration.json
+    и применяется агентом на инференсе.
+
+    Сдвигает квантильные прогнозы на константу, подобранную по val,
     чтобы эмпирическое покрытие интервала [p10, p90] стало близко к 0.80.
 
     Split-conformal в версии «один сдвиг на оба края»: вычисляем нехватку
@@ -222,7 +231,7 @@ def _conformal_calibrate(
     на коротком val-окне.
     """
     if 0.1 not in preds_val or 0.9 not in preds_val:
-        return preds_test  # нечего калибровать
+        return preds_test, 0.0  # нечего калибровать
 
     target_coverage = 0.80
     p10_v, p90_v = preds_val[0.1], preds_val[0.9]
@@ -244,7 +253,7 @@ def _conformal_calibrate(
     calibrated[0.9] = preds_test[0.9] + delta
     logger.info("Conformal calibration: delta=%.4f (val coverage было %.3f -> цель %.2f)",
                 delta, float(np.mean((y_val >= p10_v) & (y_val <= p90_v))), target_coverage)
-    return calibrated
+    return calibrated, float(delta)
 
 
 def _split_train_val(index: pd.Index, embargo: pd.Timedelta) -> tuple[np.ndarray, np.ndarray]:
@@ -333,7 +342,7 @@ def train_one_horizon(df: pd.DataFrame, cols: list[str], raw_cols: list[str] | N
 
     # Conformal calibration: сдвигаем квантили так, чтобы покрытие [p10,p90]
     # на holdout стало близко к 0.80 (сейчас 0.63–0.68 без калибровки).
-    preds = _conformal_calibrate(preds_val_raw, yval.to_numpy(), preds_raw)
+    preds, conformal_delta = _conformal_calibrate(preds_val_raw, yval.to_numpy(), preds_raw)
 
     violation_model = ViolationClassifier(cols, train_cfg, monotone)
     violation_model.fit(Xfit, yfit_v, Xval, yval_v)
@@ -373,8 +382,14 @@ def train_one_horizon(df: pd.DataFrame, cols: list[str], raw_cols: list[str] | N
     quantile_model.save(model_dir / "quantile")
     violation_model.save(model_dir / "violation")
     _write_json(model_dir / "threshold.json", {"alert_threshold": threshold})
+    _write_json(model_dir / "calibration.json", {"conformal_delta": conformal_delta})
     # всё, что нужно инференсу, чтобы пересобрать признаки один в один
+    # add_engineered делит load_rel на медиану всего датафрейма; онлайн буфер короткий,
+    # поэтому фиксируем медиану обучения (см. features_online.OnlineFeatureBuilder)
+    feed_col = _hdt_col(df.columns, "T11") or _hdt_col(df.columns, "F26")
+    feed_median = float(df[feed_col].median()) if feed_col and feed_col in df.columns else None
     _write_json(model_dir / "feature_spec.json", {
+        "feed_col": feed_col, "feed_median": feed_median,
         "horizon_points": horizon_points, "grid_freq": cfg.grid_freq, "mode": mode,
         "target_tag": cfg.target_tag, "lags_points": list(cfg.lags_points),
         "window_points": list(cfg.window_points),

@@ -123,6 +123,18 @@ class QuantileQualityModel:
         imp = pd.Series(values, index=self.feature_cols)
         return imp.sort_values(ascending=False).head(top_n)
 
+    def explain(self, X: pd.DataFrame, top_n: int = 5) -> pd.Series:
+        """Локальные SHAP-вклады признаков в прогноз медианы для ОДНОЙ строки X.
+
+        Использует pred_contrib LightGBM (точный TreeSHAP), а не глобальную важность.
+        Работает и для свежеобученной модели (LGBMRegressor), и для загруженной (Booster).
+        """
+        model = self.boosters.get(0.5) or next(iter(self.boosters.values()))
+        booster = getattr(model, "booster_", None) or model.booster
+        contrib = booster.predict(X[self.feature_cols].to_numpy(), pred_contrib=True)[0][:-1]
+        s = pd.Series(contrib, index=self.feature_cols)
+        return s.reindex(s.abs().sort_values(ascending=False).index).head(top_n)
+
     def save(self, directory: Path) -> None:
         directory.mkdir(parents=True, exist_ok=True)
         for q, model in self.boosters.items():
@@ -208,5 +220,6 @@ class _ClassifierPredictAdapter:
         self.booster = booster
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
-        p1 = self.booster.predict(X.to_numpy())
+        arr = X.to_numpy() if hasattr(X, "to_numpy") else np.asarray(X)
+        p1 = self.booster.predict(arr)
         return np.stack([1 - p1, p1], axis=1)
