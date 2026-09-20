@@ -104,9 +104,9 @@ def lead_time_minutes(index: pd.DatetimeIndex, clean_actual: pd.Series,
 
     is_violation = clean_actual > limit
     event_id = (is_violation != is_violation.shift(fill_value=False)).cumsum()
-    events = (pd.DataFrame({"violation": is_violation, "event_id": event_id}, index=index)
-              .query("violation")
-              .groupby("event_id").apply(lambda g: (g.index.min(), g.index.max())))
+    ts = pd.Series(clean_actual.index, index=clean_actual.index)
+    grp = ts[is_violation].groupby(event_id[is_violation])
+    events = list(zip(grp.min(), grp.max()))
 
     leads = []
     missed = 0

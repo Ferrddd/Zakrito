@@ -23,7 +23,7 @@ CONFIG = "src/agents/quality/config.yaml"
 
 @pytest.mark.skipif(not PARQUET.exists(), reason="нет витрины telemetry_pac_lims.parquet")
 @pytest.mark.parametrize("blind", [True, False])
-def test_online_features_match_training(blind: bool):
+def test_online_features_match_training(blind: bool) -> None:
     cfg = resolve_cfg_columns(load_feature_config(CONFIG), pq.read_schema(PARQUET).names)
     h = cfg.horizons_points[1] if len(cfg.horizons_points) > 1 else cfg.horizons_points[0]
     mode = "blind" if blind else "with_analyzer"
@@ -31,7 +31,7 @@ def test_online_features_match_training(blind: bool):
     if not spec.exists():
         pytest.skip(f"нет {spec} — сначала make train_quality")
 
-    train_df, cols, raw_cols = build_dataset(cfg, h, blind)          # то, что видела модель
+    train_df, _cols, _raw_cols = build_dataset(cfg, h, blind)          # то, что видела модель
     raw = pd.read_parquet(PARQUET)                                    # то, что придёт онлайн
     builder = OnlineFeatureBuilder.from_spec_file(spec)
 

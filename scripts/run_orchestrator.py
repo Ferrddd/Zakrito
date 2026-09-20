@@ -15,6 +15,7 @@ import logging
 
 import pandas as pd
 
+from src.agents.base import Agent
 from src.agents.quality.agent import QualityAgent
 from src.data_pipeline.pipeline_models import data_pipeline_settings
 from src.orchestrator.adapters import state_from_row
@@ -25,6 +26,7 @@ from src.utils.config import setup_logging
 
 def main() -> None:
     setup_logging()
+    logging.getLogger("src.data_pipeline.features").setLevel(logging.WARNING)  # add_engineered шумит на каждом цикле
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="src/agents/quality/config.yaml")
     ap.add_argument("--start", required=True, help="время первого состояния, напр. 2026-06-01 08:00")
@@ -41,15 +43,20 @@ def main() -> None:
     if pos >= len(df):
         raise SystemExit(f"--start {start} за пределами данных ({df.index.min()} .. {df.index.max()})")
 
+    quality: Agent
     if args.remote:
         quality = RemoteQualityAgent(args.remote)
         for ts, row in df.iloc[max(0, pos - args.warmup):pos].iterrows():
             quality.evaluate(state_from_row(ts, row))   # прогрев удалённого буфера
     else:
-        quality = QualityAgent.load(args.config)
-        quality.warm_up(df.iloc[max(0, pos - args.warmup):pos])
+        local = QualityAgent.load(args.config)
+        local.warm_up(df.iloc[max(0, pos - args.warmup):pos])
+        quality = local
 
     orch = Orchestrator(quality, audit_path=args.audit)
+    stubs = [a.name for a in (orch.reliability, orch.optimizer) if getattr(a, "is_stub", False)]
+    if stubs:
+        logging.getLogger("run_orchestrator").warning("Заглушки вместо реальных агентов: %s", ", ".join(stubs))
     log = logging.getLogger("run_orchestrator")
     for i in range(args.steps):
         j = pos + i * args.every
@@ -60,8 +67,11 @@ def main() -> None:
         log.info("%s | %-18s | %s | conf=%.2f", ts, rec.status.value, rec.headline, rec.confidence)
         if rec.problem:
             log.info("    проблема: %s", rec.problem)
+        if rec.explanation:
+            log.info("    %s", rec.explanation)
         for w in rec.warnings:
-            log.info("    ! %s", w)
+            if not w.startswith("Заглушки"):
+                log.info("    ! %s", w)
 
 
 if __name__ == "__main__":

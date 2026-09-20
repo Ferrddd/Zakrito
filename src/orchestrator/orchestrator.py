@@ -100,6 +100,7 @@ class Orchestrator:
     def _handle_risk(self, state: ProcessState, q_report: AgentReport, q_assess: Any,
                      rel: ReliabilityAssessment, snapshot: Any) -> tuple[Recommendation, list[CheckedScenario]]:
         w = worst_prediction(q_report)
+        assert w is not None  # риск есть только при наличии прогнозов
         problem = (f"Риск превышения серы {w.limit:g} {w.unit} через {w.horizon_min} мин: "
                    f"p50={w.p50:.1f}, p90={w.p90:.1f} {w.unit}, скор нарушения {w.p_violation:.2f} "
                    f"(порог {w.alert_threshold:.2f})")
@@ -113,9 +114,11 @@ class Orchestrator:
         rejected = [f"{c.scenario.name}: " + "; ".join(k.detail or k.name for k in c.checks if not k.passed)
                     for c in bad]
 
-        base = dict(trace_id=state.trace_id, timestamp=state.timestamp, problem=problem,
-                    confidence=q_report.confidence, data_freshness=self._freshness(q_report),
-                    rejected=rejected, warnings=self._warnings(q_report, rel))
+        base = {
+            "trace_id": state.trace_id, "timestamp": state.timestamp, "problem": problem,
+            "confidence": q_report.confidence, "data_freshness": self._freshness(q_report),
+            "rejected": rejected, "warnings": self._warnings(q_report, rel),
+        }
 
         if ok:
             best = ok[0]
@@ -149,6 +152,7 @@ class Orchestrator:
     def _stable(self, state: ProcessState, q_report: AgentReport, q_assess: Any,
                 rel: ReliabilityAssessment) -> Recommendation:
         w = worst_prediction(q_report)
+        assert w is not None  # stable выбирается только при наличии прогнозов
         return Recommendation(
             trace_id=state.trace_id, timestamp=state.timestamp, status=Status.stable,
             headline="Режим стабилен, изменений не требуется",

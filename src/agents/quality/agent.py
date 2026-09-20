@@ -133,7 +133,7 @@ class QualityAgent:
             horizons_min=[h * self.step_min for h in self.horizons], required_tags=required)
 
     # ------------------------------------------------------------------ история
-    def _to_grid(self, ts: object) -> pd.Timestamp:
+    def _to_grid(self, ts: Any) -> pd.Timestamp:
         t = pd.Timestamp(ts)
         if t.tzinfo is not None:
             t = t.tz_localize(None)   # витрина безтайм-зонная; берём «настенное» время
@@ -152,7 +152,7 @@ class QualityAgent:
         tail = frame.tail(self.max_history_points)
         with self._lock:
             for ts, row in tail.iterrows():
-                self._rows[self._to_grid(ts)] = {k: f for k, v in row.items() if (f := _num(v)) is not None}
+                self._rows[self._to_grid(ts)] = {str(k): f for k, v in row.items() if (f := _num(v)) is not None}
             self._rows = OrderedDict(sorted(self._rows.items())[-self.max_history_points:])
         return len(tail)
 

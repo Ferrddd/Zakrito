@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime
+from typing import Any
 
 import pandas as pd
 
@@ -16,12 +16,12 @@ from src.schemas.agents_schemas import (
     QualitySignal,
     QualitySource,
 )
-from src.schemas.process_state import AgentReport, ProcessState
+from src.schemas.process_state import AgentReport, ProcessState, QualityPrediction
 
 SULFUR_KEY = "sulfur_ppm"
 
 
-def state_from_row(ts: datetime | pd.Timestamp, row: pd.Series, trace_id: str | None = None) -> ProcessState:
+def state_from_row(ts: Any, row: pd.Series, trace_id: str | None = None) -> ProcessState:
     """Строка витрины -> ProcessState (нечисловое и NaN отбрасываются в None)."""
     tags: dict[str, float | None] = {}
     for k, v in row.items():
@@ -48,7 +48,7 @@ def to_snapshot(state: ProcessState, report: AgentReport) -> ProcessSnapshot:
             pac_status=pac_status))
 
 
-def worst_prediction(report: AgentReport):
+def worst_prediction(report: AgentReport) -> QualityPrediction | None:
     return max(report.predictions, key=lambda p: p.p_violation) if report.predictions else None
 
 

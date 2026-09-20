@@ -12,6 +12,7 @@ lightgbm
 scikit-learn
 scikit-learn-stubs
 PyYAML
+types-PyYAML
 pydantic>=2
 fastapi>=0.110
 uvicorn>=0.29

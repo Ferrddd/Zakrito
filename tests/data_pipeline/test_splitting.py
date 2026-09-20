@@ -41,7 +41,7 @@ class TestEmbargoLogic:
         assert delta == pd.Timedelta(minutes=1170)
 
     def test_embargo_delta_different_freq(self) -> None:
-        delta = embargo_delta(max_window_points=10, horizon_points=2, freq="1H", safety=2.0)
+        delta = embargo_delta(max_window_points=10, horizon_points=2, freq="1h", safety=2.0)
         assert delta == pd.Timedelta(days=1)
 
 

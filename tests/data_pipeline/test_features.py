@@ -21,7 +21,7 @@ SULFUR_ANALYZER_TAGS = ["T6", "W7", "P13"]   # config.yaml -> sulfur_analyzer_ta
 VIRTUAL_ANALYZER_TAGS = ["F25"]              # config_density.yaml -> virtual_analyzer_tags
 
 # Минимальный FeatureConfig: только поля, которые читают add_target / feature_columns.
-CFG = SimpleNamespace(target_tag=SULFUR_TAG, target_limit=10.0,
+CFG: Any = SimpleNamespace(target_tag=SULFUR_TAG, target_limit=10.0,
                       sulfur_analyzer_columns=SULFUR_ANALYZER_TAGS)
 
 

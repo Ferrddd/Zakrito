@@ -25,6 +25,8 @@ import json
 import logging
 import re
 from collections import Counter
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -265,7 +267,7 @@ def _split_train_val(index: pd.Index, embargo: pd.Timedelta) -> tuple[np.ndarray
     return fit, val
 
 
-def _write_json(path, obj) -> None:
+def _write_json(path: Path, obj: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(obj, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
@@ -353,7 +355,7 @@ def train_one_horizon(df: pd.DataFrame, cols: list[str], raw_cols: list[str] | N
     threshold = best_threshold(yval, p_violation_val, cfg.target_limit,
                                cfg.violation_min_precision)
 
-    holdout_metrics = {"bias_q50": float((preds[0.5] - yte.to_numpy()).mean())}
+    holdout_metrics: dict[str, Any] = {"bias_q50": float((preds[0.5] - yte.to_numpy()).mean())}
     holdout_metrics.update(evaluate_quantiles(yte, preds))
     holdout_metrics.update(_baselines(df, Xte.index, ytr, yte, cfg))
     holdout_metrics.update({f"violation_{k}": v for k, v in

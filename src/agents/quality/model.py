@@ -23,6 +23,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import lightgbm as lgb
 import numpy as np
@@ -81,12 +82,12 @@ class QuantileQualityModel:
         self.horizon_min = horizon_min
         self.config = config or LGBMTrainConfig()
         self.monotone_constraints = monotone_constraints or [0] * len(feature_cols)
-        self.boosters: dict[float, lgb.LGBMRegressor] = {}
+        self.boosters: dict[float, Any] = {}   # LGBMRegressor после fit, _BoosterPredictAdapter после load
 
     def fit(self, X_train: pd.DataFrame, y_train: pd.Series,
             X_valid: pd.DataFrame | None = None, y_valid: pd.Series | None = None) -> QuantileQualityModel:
-        callbacks = []
-        eval_set = None
+        callbacks: Any = []
+        eval_set: Any = None
         if X_valid is not None and y_valid is not None and len(X_valid):
             eval_set = [(X_valid[self.feature_cols].to_numpy(), y_valid.to_numpy())]
             callbacks = [lgb.early_stopping(self.config.early_stopping_rounds, verbose=False)]
@@ -163,7 +164,7 @@ class _BoosterPredictAdapter:
         self.booster = booster
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
-        return self.booster.predict(X)
+        return np.asarray(self.booster.predict(X))
 
 
 class ViolationClassifier:
@@ -174,14 +175,15 @@ class ViolationClassifier:
         self.feature_cols = feature_cols
         self.config = config or LGBMTrainConfig()
         self.monotone_constraints = monotone_constraints or [0] * len(feature_cols)
-        self.model: lgb.LGBMClassifier | None = None
+        self.model: Any = None   # LGBMClassifier после fit, _ClassifierPredictAdapter после load
 
     def fit(self, X_train: pd.DataFrame, y_train: pd.Series,
        X_valid: pd.DataFrame | None = None, y_valid: pd.Series | None = None) -> ViolationClassifier:
         pos = float(y_train.mean())
         scale_pos_weight = (1 - pos) / max(pos, 1e-6)  # компенсация небаланса классов
 
-        callbacks, eval_set = [], None
+        callbacks: Any = []
+        eval_set: Any = None
         if X_valid is not None and y_valid is not None and len(X_valid):
             eval_set = [(X_valid[self.feature_cols].to_numpy(), y_valid.to_numpy())]
             callbacks = [lgb.early_stopping(self.config.early_stopping_rounds, verbose=False)]
@@ -197,7 +199,7 @@ class ViolationClassifier:
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         assert self.model is not None, "модель не обучена"
-        return self.model.predict_proba(X[self.feature_cols].to_numpy())[:, 1]
+        return np.asarray(self.model.predict_proba(X[self.feature_cols].to_numpy()))[:, 1]
 
     def save(self, directory: Path) -> None:
         directory.mkdir(parents=True, exist_ok=True)
@@ -221,5 +223,5 @@ class _ClassifierPredictAdapter:
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         arr = X.to_numpy() if hasattr(X, "to_numpy") else np.asarray(X)
-        p1 = self.booster.predict(arr)
+        p1 = np.asarray(self.booster.predict(arr))
         return np.stack([1 - p1, p1], axis=1)
