@@ -8,7 +8,7 @@ body {
     margin: 0;
     background:linear-gradient(to left top, #0b0f19 5%, #400d7b 14%, #6e0bd0 28%, #430d81 43%, #2f0e5c 55%, #0b0f19 74%);
     background-size: 200% 200%;
-    /* animation: moveGradient 20s ease infinite alternate; */
+    animation: moveGradient 20s ease infinite alternate;
 }
 header {
     height: 50px;
@@ -62,13 +62,13 @@ main > div:hover {
 .scroll_bar_zone {
     flex-grow: 1;
     flex-shrink: 1;
-    min-height: 150px;
+    min-height: 200px;
     overflow-y: auto;
-    padding: 0 20px 20px 20px;
+    padding: 20px 20px 20px 20px;
     color: #ffffff;
 }
 .scroll_bar_zone::-webkit-scrollbar {
-    width: 6px;
+    width: 7px;
 }
 .scroll_bar_zone::-webkit-scrollbar-track {
     background: transparent;
@@ -76,6 +76,9 @@ main > div:hover {
 .scroll_bar_zone::-webkit-scrollbar-thumb {
     background: #ffffff2f;
     border-radius: 10px;
+}
+.scroll_bar_zone:hover::-webkit-scrollbar-thumb { 
+    background: #fcfcfc93; 
 }
 .dynemic-parameters-grid {
     display: grid;
@@ -86,9 +89,9 @@ main > div:hover {
 }
 #contrains_checked {
     flex-shrink: 0;
-    padding: 20px 20px;
+    /* padding: 20px 20px; */
     color: #ffffff;
-    border-top: 1px solid #ffde4d;
+    
 }
 
 .predict_unit{
