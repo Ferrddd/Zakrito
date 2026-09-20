@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 
 import pandas as pd
 
@@ -21,6 +22,7 @@ from src.data_pipeline.pipeline_models import data_pipeline_settings
 from src.orchestrator.adapters import state_from_row
 from src.orchestrator.clients import RemoteQualityAgent
 from src.orchestrator.orchestrator import Orchestrator
+from src.orchestrator.ui_client import UIPublisher
 from src.utils.config import setup_logging
 
 
@@ -35,6 +37,11 @@ def main() -> None:
     ap.add_argument("--warmup", type=int, default=288, help="точек истории до --start для прогрева буфера")
     ap.add_argument("--remote", default=None, help="URL HTTP-агента качества вместо in-process")
     ap.add_argument("--audit", default="data/converted/audit/cycles.jsonl")
+    ap.add_argument("--ui-url", default=None,
+                    help="POST результата каждого цикла в UI, напр. http://localhost:3000/api/cycles "
+                         "(или переменная UI_URL). Без флага в UI ничего не отправляется")
+    ap.add_argument("--ui-dump", default=None, help="писать JSON для UI в файл (JSON Lines), без отправки")
+    ap.add_argument("--ui-tz", default=None, help="таймзона для меток времени, напр. Europe/Moscow")
     args = ap.parse_args()
 
     df = pd.read_parquet(data_pipeline_settings.converted_data_path / "telemetry_pac_lims.parquet")
@@ -53,7 +60,11 @@ def main() -> None:
         local.warm_up(df.iloc[max(0, pos - args.warmup):pos])
         quality = local
 
-    orch = Orchestrator(quality, audit_path=args.audit)
+    publisher = None
+    ui_url = args.ui_url or os.environ.get("UI_URL")
+    if ui_url or args.ui_dump:
+        publisher = UIPublisher(url=ui_url, dump_path=args.ui_dump, tz=args.ui_tz, send=bool(ui_url))
+    orch = Orchestrator(quality, audit_path=args.audit, publisher=publisher)
     stubs = [a.name for a in (orch.reliability, orch.optimizer) if getattr(a, "is_stub", False)]
     if stubs:
         logging.getLogger("run_orchestrator").warning("Заглушки вместо реальных агентов: %s", ", ".join(stubs))

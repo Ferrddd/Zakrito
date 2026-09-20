@@ -1,0 +1,103 @@
+{
+  "meta": {
+    "timestamp": "2026-09-12T21:54:30+02:00", 
+    "cycle_id": "cycle_8472",                 
+    "has_safe_solution": true,                
+    "system_status": "WARNING"                
+  },
+
+  
+  "input_state": {
+    "telemetry_summary": [ 
+      {"tag": "T-101", "name": "Температура АВТ", "value": 350.5, "unit": "°C"},
+      {"tag": "T-102", "name": "Температура АВТ 2", "value": 351, "unit": "°C"}
+    ],
+    "quality_sources": [
+      {
+        "source_type": "LIMS",
+        "parameter": "Сера",
+        "value": 8.5,
+        "unit": "мг/кг",
+        "measured_at": "2026-09-12T20:00:00+02:00",
+        "age_minutes": 114,
+        "is_outdated": true
+      }
+    ],
+    "data_quality_warnings": ["Анализ серы устарел (более 1 часа)"]
+  },
+
+  "orchestrator_decision": { 
+
+    "problem_detected": "Риск нарушения ограничения по содержанию серы в товарном дизельном топливе",
+    "recommendation": [
+      {
+        "tag": "F-201",
+        "name": "Расход сырья",
+        "current_value": 150,
+        "target_value": 145,
+        "direction": "down",
+        "unit": "т/ч"
+      }
+    ],
+    "expected_effects": {
+      "quality": "Снижение содержания серы до 9.5 мг/кг",
+      "production": "Снижение выработки на 3.3%",
+      "equipment_risk": "Режим в пределах нормы"
+    },
+    "constraints_checked": [
+      {"constraint": "Сера <= 10 мг/кг", "status": "pass", "priority": "high"},
+      {"constraint": "Доли компонентов = 100%", "status": "pass", "priority": "high"}
+    ],
+    "explanation": "Снижение расхода необходимо для удержания серы в норме, так как качество имеет приоритет над производительностью.",
+    "overall_confidence": 0.85
+  },
+
+  "alternatives": [ 
+    {
+      "scenario_id": "alt_1",
+      "description": "Изменение режима гидроочистки",
+      "rejected_reason": "Выход за модельный диапазон температур"
+    }
+  ],
+
+  "agents_trace": { 
+    "nodes": [ 
+      {"id": "quality_agent", "status": "done", "confidence": 0.9},
+      {"id": "reliability_agent", "status": "done", "confidence": 0.95},
+      {"id": "optimization_agent", "status": "done", "confidence": 0.8},
+      {"id": "orchestrator", "status": "done", "confidence": 0.85}
+    ],
+    "edges": [ 
+      {"from": "quality_agent", "to": "optimization_agent", "data_passed": ["forecast_sulfur_10.2"]},
+      {"from": "reliability_agent", "to": "optimization_agent", "data_passed": ["risk_index_low"]}
+    ],
+    "raw_evaluations": { 
+      "quality_agent": {"forecast": {"sulfur": 10.2}, "risk_of_violation": true},
+      "reliability_agent": {"risk_index": 0.2, "mode_permissible": true},
+      "optimization_agent": {"generated_scenarios": 3, "valid_scenarios": 1}
+    }
+  },
+
+  "visualization_data": { 
+    "pareto_front": [
+      {"x_production": 145, "y_sulfur": 9.5, "is_selected": true},
+      {"x_production": 150, "y_sulfur": 10.2, "is_selected": false}
+    ],
+    "trend_charts": {
+      "timestamps": ["..."],
+      "sulfur_actual": ["..."],
+      "sulfur_forecast": ["..."]
+    }
+  },
+  "agent_statistics": {
+    "total_sessions": 142,
+    "success_rate": 94.5,
+    "avg_response_time": 2.4,
+    "agent_calls": [
+      { "agent": "quality_agent", "calls": 120 },
+      { "agent": "optimization_agent", "calls": 85 },
+      { "agent": "safety_agent", "calls": 110 },
+      { "agent": "orchestrator", "calls": 142 }
+    ]
+  }
+}
