@@ -2,7 +2,7 @@ PYTHON ?= .venv/bin/python
 ROOT_DIR = .
 
 export PYTHONDONTWRITEBYTECODE=1
-
+.PHONY: ui
 install:
 	python3.12 -m venv .venv
 	$(PYTHON) -m pip install --upgrade pip
@@ -31,3 +31,6 @@ data_pipeline:
 
 train_model:
 	$(PYTHON) -m scripts.train_model
+ui:
+	@echo "Запуск фронтенда и тестовых данных"
+	cd ui && node server.js & cd ui && node test.js
