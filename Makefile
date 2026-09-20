@@ -12,13 +12,17 @@ QUALITY_URL ?= http://localhost:8001
 export PYTHONDONTWRITEBYTECODE=1
 
 .PHONY: install update_venv copy_env lint lint-ruff lint-mypy test test_orchestrator \
-	data_pipeline train_quality quality_api backfill_feed_median train_model \
+	data_pipeline train_quality train_reliability diagnose_reliability quality_api backfill_feed_median train_model \
 	orchestrator_demo orchestrator_dump orchestrator_ui orchestrator_remote ui demo help
 
 help:
 	@echo "install / update_venv / copy_env  - окружение"
 	@echo "lint / test / test_orchestrator   - проверки"
 	@echo "data_pipeline / train_quality     - данные и обучение агента качества"
+	@echo "train_reliability                 - обучить модель ΔP агента надёжности"
+	@echo "diagnose_reliability              - диагностика тега ΔP перед обучением"
+	@echo "train_reliability                 - обучить модель ΔP агента надёжности"
+	@echo "diagnose_reliability              - диагностика тега ΔP перед обучением"
 	@echo "quality_api                       - HTTP-агент качества (порт 8001)"
 	@echo "orchestrator_demo                 - прогон оркестратора, вывод в консоль"
 	@echo "orchestrator_dump                 - прогон + JSON для UI в $(UI_DUMP)"
@@ -61,6 +65,14 @@ data_pipeline:
 train_quality:
 	$(PYTHON) -m src.agents.quality.train --horizon 6 --skip-cv --force-rebuild
 
+# Агент надёжности: модель нормального поведения ΔP (после data_pipeline)
+train_reliability:
+	$(PYTHON) -m src.agents.reliability.train
+
+# Что за сигнал W10: распределение, месяцы, корреляции, ΔP по возрасту блока
+diagnose_reliability:
+	$(PYTHON) -m src.agents.reliability.diagnose
+
 backfill_feed_median:
 	$(PYTHON) -m scripts.backfill_feed_median
 
@@ -94,3 +106,4 @@ ui:
 # Полный демо-сценарий: поднять UI в одном терминале, оркестратор — в другом
 demo:
 	@echo "1) make ui   2) в другом терминале: make orchestrator_ui STEPS=50 EVERY=6"
+
