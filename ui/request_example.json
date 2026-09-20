@@ -88,5 +88,16 @@
       "sulfur_actual": ["..."],
       "sulfur_forecast": ["..."]
     }
+  },
+  "agent_statistics": {
+    "total_sessions": 142,
+    "success_rate": 94.5,
+    "avg_response_time": 2.4,
+    "agent_calls": [
+      { "agent": "quality_agent", "calls": 120 },
+      { "agent": "optimization_agent", "calls": 85 },
+      { "agent": "safety_agent", "calls": 110 },
+      { "agent": "orchestrator", "calls": 142 }
+    ]
   }
 }

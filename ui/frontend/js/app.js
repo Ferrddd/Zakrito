@@ -1,7 +1,9 @@
 import { eventBus } from './event.js';
 import { AgentGraph } from './components/graph.js';
+import { AgentDashboards } from './components/dashboards.js';
 
 const graph = new AgentGraph('.agent_tracer');
+const dashboards = new AgentDashboards('.dashbords');
 
 //функции динамического обновления DOM на основе JSON
 
@@ -113,6 +115,7 @@ ws.onmessage = (event) => {
         if (payload.agents_trace) eventBus.emit('data:agents_trace', payload.agents_trace);
         if (payload.orchestrator_decision) eventBus.emit('data:orchestrator', payload.orchestrator_decision);
         if (payload.input_state) eventBus.emit('data:telemetry', payload.input_state);
+        if (payload.agent_statistics) eventBus.emit('data:statistics', payload.agent_statistics);
         
     } catch (err) {
         console.error('Ошибка обработки JSON из вебсокета:', err);
