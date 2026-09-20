@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAS</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+
+    </header>
+    <main>
+            <div class="predict_unit">
+                <div class="static-zone">
+                    <div id="main_advice">
+                        <h1>Problem</h1>
+                     
+                        <p id="problem-detect">Риск нарушения ограничения по содержанию серы в товарном дизельном топливе</p>
+                    </div>
+                </div>
+                <div class="scroll_bar_zone">
+                    <div id="expectation-n-explain">
+                        <h2>Expectation</h2>
+                        <div id="expect-flex">
+                            <div id="expec-quality">Снижение содержания серы до 9.5 мг/кг</div>
+                            <div id="expec-prod">Снижение выработки на 3.3%</div>
+                            <div id="expec-equip-risk">Режим в пределах нормы</div>
+                        </div>
+                        
+                        <h2>Explanation</h2>
+                        <p id="expectation-explain">Снижение расхода необходимо для удержания серы в норме, так как качество имеет приоритет над производительностью.</p>
+                    </div>
+                
+                
+                <!-- <div class="scroll_bar_zone"> -->
+                    <h2>Recomendation</h2>
+                    <div class="dynemic-parameters-grid">
+                        <div class="param-teg">teg</div>
+                        <div class="param-name">name</div>
+                        <div class="param-val">value</div>
+                        <div class="param-unit">unit</div>
+                        
+                    </div>
+                    <div id="contrains_checked">
+                    </div>
+                </div>
+                
+            </div>
+            <!-- для динамического обновления таблицы -->
+            <template id="param-row-template">
+                <div class="param-tag"></div>
+                <div class="param-name"></div>
+                <div class="param-val"></div>
+                <div class="param-unit"></div>
+            </template>
+
+            <div class="telemetry_block">
+                <div id="kip">
+                    <h2 class="main-pad">КИП</h2>
+                    <div class="scroll_bar_zone">
+                        <div class="kips-table">
+                            <div class="kip-tag">tag</div>
+                            <div class="kip-name">name</div>
+                            <div class="kip-value">value</div>
+                            <div class="kip-unit">unit</div>
+                            
+                        </div>
+                    </div>
+                </div>
+                <div id="LIMS">
+                    <h2 class="main-pad">ЛИМС</h2>
+                    <div class="scroll_bar_zone">
+                        <p>
+                            Для объекта <span id="lims-param">Сера</span>, иследования <span id="lims-type">LIMS</span>, было получено значение <span id="lims-val">8.5</span> <span id="lims-unit">мг/кг</span>
+                        </p>
+                        <p>Дата иследования: <span id="lims-date">2026-09-12T20:00:00+02:00</span></p>
+                    </div>
+                    <div id="LIMS-warning" class="main-pad">Анализ серы устарел</div>
+                </div>
+                   
+                
+            </div>
+            <div class="agent_tracer"></div>
+            <div class="dashbords"></div>
+
+    </main>
+    <script type="text/javascript" src="js/vis-network.min.js"></script>
+    
+    
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
