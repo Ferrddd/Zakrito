@@ -1,0 +1,13 @@
+.git
+.venv
+.env
+data
+ui/node_modules
+node_modules
+__pycache__
+*.pyc
+.mypy_cache
+.ruff_cache
+.pytest_cache
+*.parquet
+*.xlsx

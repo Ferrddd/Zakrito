@@ -1,13 +1,18 @@
-"""Оркестратор v1.
+"""Оркестратор
 
-Один цикл (ТЗ п.1):
+Один цикл:
     состояние -> агент качества -> [агент надёжности] -> риск? -> [агент оптимизации]
     -> проверка жёстких ограничений на каждом сценарии (what-if через агент качества)
     -> рекомендация / отказ
 
-Реально работает: агент качества, решение «стабильно / риск / отказ», проверка
-сценариев, аудит-лог. Заглушки (помечены is_stub и попадают в Recommendation.stubbed_agents):
-агент надёжности и агент оптимизации — подключаются через конструктор без правок кода.
+Агенты качества, надёжности и оптимизации подключаются через конструктор. Если
+надёжность/оптимизатор не переданы, используются заглушки (is_stub=True) — они
+попадают в Recommendation.stubbed_agents и в предупреждения.
+
+Оптимизатор получает на время цикла what-if через агента качества (bind_probe) и
+сам проверяет жёсткие ограничения своих сценариев (check_constraints); оркестратор
+независимо перепроверяет каждый сценарий: what-if по качеству + ограничения оптимизатора.
+Результаты what-if кэшируются на цикл — сценарий, уже прогнанный при поиске, повторно не считается.
 
 Принцип ТЗ «качество важнее экономики» реализован тут структурно: оптимизатор может
 только предлагать, а сценарий, не прошедший жёсткие проверки, физически не попадает
@@ -37,6 +42,7 @@ from src.orchestrator.contracts import (
     NotConnectedOptimizer,
     NotConnectedReliability,
     OptimizationAgent,
+    ProbeResult,
     Recommendation,
     ReliabilityAgent,
     Scenario,
@@ -72,6 +78,8 @@ class Orchestrator:
         self.max_alternatives = max_alternatives
         self.publisher = publisher      # напр. UIPublisher — вызывается после каждого цикла
         self.stats = CycleStats()
+        self._eval_cache: dict[tuple, AgentReport] = {}
+        self._probe_calls = 0
 
     # ------------------------------------------------------------------ цикл
     def run_cycle(self, state: ProcessState) -> Recommendation:
@@ -92,6 +100,7 @@ class Orchestrator:
         return ctx.recommendation
 
     def _run_cycle(self, state: ProcessState) -> CycleContext:
+        self._eval_cache, self._probe_calls = {}, 0
         # 1-3. качество
         q_report = self.quality.evaluate(state)
         q_assess = to_quality_assessment(q_report)
@@ -120,7 +129,7 @@ class Orchestrator:
         if stubs:
             rec.warnings.append(f"Заглушки (не реальные агенты): {', '.join(stubs)}")
         self._audit(state, q_report, rel, scenarios, rec)
-        calls = {"quality_agent": 1 + len(scenarios), "reliability_agent": 1,
+        calls = {"quality_agent": 1 + self._probe_calls, "reliability_agent": 1,
                  "optimization_agent": int(optimizer_called), "orchestrator": 1}
         return CycleContext(state=state, quality=q_report, reliability=rel, scenarios=scenarios,
                             recommendation=rec, optimizer_called=optimizer_called, stubbed=stubs,
@@ -137,8 +146,19 @@ class Orchestrator:
         inp = OptimizationInput(
             snapshot=snapshot, quality=to_quality_signal(q_assess),
             reliability=ReliabilitySignal(severity_index=rel.severity_index, risk_class=rel.risk_class))
-        proposed = self.optimizer.propose(inp)
-        checked = [self._check(state, s) for s in proposed]
+        bind = getattr(self.optimizer, "bind_probe", None)
+        opt_error: str | None = None
+        if bind:
+            bind(self._make_probe(state))
+        try:
+            proposed = self.optimizer.propose(inp)
+        except Exception as e:   # сбой оптимизатора не должен ронять цикл принятия решения
+            logger.exception("Агент оптимизации завершился с ошибкой")
+            proposed, opt_error = [], f"{type(e).__name__}: {e}"
+        finally:
+            if bind:
+                bind(None)
+        checked = [self._check(state, s, rel) for s in proposed]
         ok = sorted((c for c in checked if c.passed), key=lambda c: c.scenario.score, reverse=True)
         bad = [c for c in checked if not c.passed]
         rejected = [f"{c.scenario.name}: " + "; ".join(k.detail or k.name for k in c.checks if not k.passed)
@@ -149,6 +169,8 @@ class Orchestrator:
             "confidence": q_report.confidence, "data_freshness": self._freshness(q_report),
             "rejected": rejected, "warnings": self._warnings(q_report, rel),
         }
+        if opt_error:
+            base["warnings"].append(f"Агент оптимизации завершился с ошибкой: {opt_error}")
 
         if ok:
             best = ok[0]
@@ -170,6 +192,17 @@ class Orchestrator:
                 status=Status.no_recommendation,
                 headline="Надёжной рекомендации нет: все варианты нарушают ограничения",
                 explanation="Оптимизатор предложил варианты, но ни один не прошёл жёсткие проверки.",
+                **base), checked
+
+        if not getattr(self.optimizer, "is_stub", False):   # реальный оптимизатор ничего не нашёл — это отказ
+            drivers = ", ".join(f"{d.tag} ({d.shap:+.2f})" for d in q_report.drivers)
+            return Recommendation(
+                status=Status.no_recommendation,
+                headline="Надёжной рекомендации нет: допустимых вариантов не найдено",
+                explanation=("Оптимизатор перебрал сдвиги управляющих параметров в пределах допустимого шага "
+                             "и модельных диапазонов, но ни один вариант не снимает риск по качеству без "
+                             "нарушения ограничений (или произошла ошибка оптимизатора). Оператору передан "
+                             "сигнал риска; главные драйверы прогноза: " + (drivers or "—")),
                 **base), checked
 
         return Recommendation(
@@ -214,9 +247,44 @@ class Orchestrator:
             explanation="Агент надёжности классифицировал режим как critical; автоматических рекомендаций нет.")
 
     # ------------------------------------------------------------------ жёсткие проверки
-    def _check(self, state: ProcessState, sc: Scenario) -> CheckedScenario:
-        report = self.quality.evaluate(state, overrides=sc.changes)
+    def _evaluate(self, state: ProcessState, overrides: dict[str, float]) -> AgentReport:
+        """what-if агента качества с кэшем на цикл (ключ — набор подстановок)."""
+        key = tuple(sorted(overrides.items()))
+        rep = self._eval_cache.get(key)
+        if rep is None:
+            rep = self.quality.evaluate(state, overrides=overrides)
+            self._eval_cache[key] = rep
+            self._probe_calls += 1
+        return rep
+
+    def _make_probe(self, state: ProcessState) -> Callable[[dict[str, float]], ProbeResult | None]:
+        def probe(changes: dict[str, float]) -> ProbeResult | None:
+            report = self._evaluate(state, changes)
+            if report.abstain or not report.predictions:
+                return None
+            ps = report.predictions
+            return ProbeResult(
+                p50=max(p.p50 for p in ps), p90=max(p.p90 for p in ps),
+                p_violation=max(p.p_violation for p in ps),
+                ok=all((not p.alert) and (not p.p90_over_limit) for p in ps), limit=ps[0].limit)
+        return probe
+
+    def _check(self, state: ProcessState, sc: Scenario, rel: ReliabilityAssessment | None = None) -> CheckedScenario:
         checks: list[ConstraintCheck] = []
+        # 1. ограничения оптимизатора: модельные диапазоны, шаг, ВАК, надёжность (п.4 ТЗ «правило границ»)
+        own = getattr(self.optimizer, "check_constraints", None)
+        if own is not None:
+            checks += own(state.tags, sc, rel)
+        if sc.blend_fractions is not None:
+            total = sum(sc.blend_fractions.values())
+            checks.append(ConstraintCheck(name="сумма долей блендинга = 100%", passed=abs(total - 100) < 0.01,
+                                          detail=f"сумма={total:g}"))
+        if not all(c.passed for c in checks):
+            # режим уже недопустим — прогон качества не нужен (и не тратим вызовы агента качества)
+            return CheckedScenario(scenario=sc, checks=checks, passed=False, predicted=[])
+
+        # 2. качество: what-if через агента качества
+        report = self._evaluate(state, sc.changes)
         if report.abstain or not report.predictions:
             checks.append(ConstraintCheck(name="прогноз качества для сценария", passed=False,
                                           detail=report.reason or "нет прогноза"))
@@ -225,11 +293,6 @@ class Orchestrator:
             checks.append(ConstraintCheck(
                 name=f"сера <= {p.limit:g} {p.unit} @ {p.horizon_min} мин", passed=ok,
                 detail=f"p90={p.p90:.1f}, скор {p.p_violation:.2f}/{p.alert_threshold:.2f}"))
-        if sc.blend_fractions is not None:
-            total = sum(sc.blend_fractions.values())
-            checks.append(ConstraintCheck(name="сумма долей блендинга = 100%", passed=abs(total - 100) < 0.01,
-                                          detail=f"сумма={total:g}"))
-        # TODO: явные технологические/модельные диапазоны управляющих тегов (п.4 ТЗ «правило границ»)
         return CheckedScenario(
             scenario=sc, checks=checks, passed=all(c.passed for c in checks),
             predicted=[{"horizon_min": p.horizon_min, "p50": p.p50, "p90": p.p90} for p in report.predictions])

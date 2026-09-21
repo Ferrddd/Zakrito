@@ -1,0 +1,8 @@
+FROM node:20-alpine
+WORKDIR /app
+COPY ui/ ./
+# если у UI есть package.json — ставим зависимости, иначе пропускаем
+RUN if [ -f package.json ]; then npm install --omit=dev --no-audit --no-fund; fi
+ENV PORT=3000
+EXPOSE 3000
+CMD ["node", "server.js"]

@@ -13,14 +13,13 @@ export PYTHONDONTWRITEBYTECODE=1
 
 .PHONY: install update_venv copy_env lint lint-ruff lint-mypy test test_orchestrator \
 	data_pipeline train_quality train_reliability diagnose_reliability quality_api backfill_feed_median train_model \
-	orchestrator_demo orchestrator_dump orchestrator_ui orchestrator_remote ui demo help
+	orchestrator_demo orchestrator_dump orchestrator_ui orchestrator_remote ui demo help \
+	docker-up docker-down docker-logs docker-reset
 
 help:
 	@echo "install / update_venv / copy_env  - окружение"
 	@echo "lint / test / test_orchestrator   - проверки"
 	@echo "data_pipeline / train_quality     - данные и обучение агента качества"
-	@echo "train_reliability                 - обучить модель ΔP агента надёжности"
-	@echo "diagnose_reliability              - диагностика тега ΔP перед обучением"
 	@echo "train_reliability                 - обучить модель ΔP агента надёжности"
 	@echo "diagnose_reliability              - диагностика тега ΔP перед обучением"
 	@echo "quality_api                       - HTTP-агент качества (порт 8001)"
@@ -29,6 +28,7 @@ help:
 	@echo "orchestrator_ui                   - прогон + POST в UI ($(UI_URL))"
 	@echo "orchestrator_remote               - прогон через quality_api ($(QUALITY_URL))"
 	@echo "ui                                - фронтенд + тестовые данные"
+	@echo "docker-up / docker-down / docker-logs - всё одной командой в Docker"
 
 install:
 	python3.12 -m venv .venv
@@ -76,9 +76,6 @@ diagnose_reliability:
 backfill_feed_median:
 	$(PYTHON) -m scripts.backfill_feed_median
 
-train_model:
-	$(PYTHON) -m scripts.train_model
-
 # Агент качества: API и оркестратор
 quality_api:
 	$(PYTHON) -m uvicorn src.agents.quality.api:app --port 8001
@@ -107,3 +104,16 @@ ui:
 demo:
 	@echo "1) make ui   2) в другом терминале: make orchestrator_ui STEPS=50 EVERY=6"
 
+# Docker: сборка + подготовка данных/моделей + API + UI + оркестратор
+docker-up:
+	docker compose up --build
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f orchestrator quality-api
+
+# сбросить модели и витрину (пересоберутся при следующем docker-up)
+docker-reset:
+	rm -rf data/converted/models data/converted/dataset_cache data/converted/telemetry_pac_lims.parquet

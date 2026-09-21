@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -82,7 +83,21 @@ class CycleContext:
     stats: dict[str, Any] = field(default_factory=dict)
 
 
-# ---- протоколы будущих агентов + заглушки ----------------------------------
+@dataclass(frozen=True)
+class ProbeResult:
+    """Итог what-if прогноза агента качества для гипотетического режима (худший горизонт)."""
+    p50: float
+    p90: float
+    p_violation: float
+    ok: bool          # нет тревоги классификатора и p90 <= лимит на всех горизонтах
+    limit: float
+
+
+# what-if: {колонка: новое значение} -> прогноз качества (None — агент качества отказался)
+Probe = Callable[[dict[str, float]], ProbeResult | None]
+
+
+# ---- протоколы агентов + заглушки -------------------------------------------
 class ReliabilityAgent(Protocol):
     name: str
     is_stub: bool
@@ -95,6 +110,15 @@ class OptimizationAgent(Protocol):
     is_stub: bool
 
     def propose(self, inp: OptimizationInput) -> list[Scenario]: ...
+
+    def bind_probe(self, probe: Probe | None) -> None:
+        """Оркестратор даёт оптимизатору what-if через агента качества на время одного цикла."""
+        ...
+
+    def check_constraints(self, state_tags: Mapping[str, float | None], scenario: Scenario,
+                          reliability: ReliabilityAssessment | None) -> list[ConstraintCheck]:
+        """Жёсткие проверки сценария на стороне оптимизатора (диапазоны, шаг, ВАК, надёжность)."""
+        ...
 
 
 class NotConnectedReliability:
@@ -114,4 +138,11 @@ class NotConnectedOptimizer:
     is_stub = True
 
     def propose(self, inp: OptimizationInput) -> list[Scenario]:
+        return []
+
+    def bind_probe(self, probe: Probe | None) -> None:
+        return None
+
+    def check_constraints(self, state_tags: Mapping[str, float | None], scenario: Scenario,
+                          reliability: ReliabilityAssessment | None) -> list[ConstraintCheck]:
         return []
