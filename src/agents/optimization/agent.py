@@ -33,7 +33,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime as _dt
 from itertools import product
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # 1. Управляемые параметры (action space)
@@ -158,8 +160,8 @@ class Scenario:
 @dataclass
 class OptimizationInput:
     current_state: dict[str, float]                     # текущие значения ВСЕХ тегов (control+context)
-    quality_forecast: dict[str, dict[str, float]]        # от агента качества: {"sulfur_ppm": {"pred":.., "confidence":..}, ...}
-    reliability_assessment: dict[str, object]            # от агента надёжности: {"risk_level":.., "hard_constraints": {...}}
+    quality_forecast: dict[str, dict[str, Any]]         # от агента качества: {"sulfur_ppm": {"pred":.., "confidence":..}, ...}
+    reliability_assessment: dict[str, Any]             # от агента надёжности: {"risk_level":.., "hard_constraints": {...}}
     spec: Spec
     objective_weights: dict[str, float] = field(
         default_factory=lambda: {"quality_risk": 0.4, "throughput": 0.2, "energy": 0.2, "reliability_risk": 0.2}
@@ -270,18 +272,19 @@ def evaluate_scenario(scn: Scenario, opt_input: OptimizationInput) -> Scenario:
             violations.append(f"T90={scn.predicted_quality['T90']:.1f} > {opt_input.spec.t90_max_c}")
 
     # --- жёсткие ограничения от агента надёжности (например, предельная загрузка) ---
-    reliability_bounds = opt_input.reliability_assessment.get("hard_constraints", {}) or {}
-    for tag, limit in reliability_bounds.items():
-        val = scn.deltas.get(tag)
-        if val is None:
-            continue
-        if isinstance(limit, tuple):
-            lo, hi = limit
-            if not (lo <= val <= hi):
-                violations.append(f"{tag}={val:.2f} вне допустимого диапазона надёжности {limit}")
-        else:  # трактуем как верхний предел
-            if val > limit:
-                violations.append(f"{tag}={val:.2f} > предел надёжности {limit}")
+    reliability_bounds = opt_input.reliability_assessment.get("hard_constraints", {})
+    if isinstance(reliability_bounds, dict):
+        for tag, limit in reliability_bounds.items():
+            val = scn.deltas.get(tag)
+            if val is None:
+                continue
+            if isinstance(limit, tuple):
+                lo, hi = limit
+                if not (lo <= val <= hi):
+                    violations.append(f"{tag}={val:.2f} вне допустимого диапазона надёжности {limit}")
+            elif isinstance(limit, (int, float)):  # трактуем как верхний предел
+                if val > limit:
+                    violations.append(f"{tag}={val:.2f} > предел надёжности {limit}")
 
     scn.violations = violations
     scn.feasible = len(violations) == 0
@@ -309,7 +312,8 @@ def evaluate_scenario(scn: Scenario, opt_input: OptimizationInput) -> Scenario:
                 energy_proxy += abs(scn.deltas[tag] - base) / abs(base)
 
     # 4) reliability_risk: берём напрямую из оценки агента надёжности (если дан численный risk_score)
-    reliability_risk = float(opt_input.reliability_assessment.get("risk_score", 0.0))
+    risk_val = opt_input.reliability_assessment.get("risk_score", 0.0)
+    reliability_risk = float(risk_val) if isinstance(risk_val, (int, float, str)) else 0.0
 
     scn.objectives = {
         "quality_risk": quality_risk,
@@ -410,8 +414,6 @@ def run_optimization_agent(opt_input: OptimizationInput,
 # узел (гидроочистка/стабилизация), для которого построены формулы ВАК,
 # поэтому коллизий имён тегов между установками здесь не возникает.
 
-from datetime import datetime as _dt
-
 import pandas as pd  # используется только в загрузчиках телеметрии ниже
 
 
@@ -420,7 +422,7 @@ def load_latest_lims_godt(path: str) -> dict[str, tuple[_dt | None, float | None
     качества для точки 'Гидроочистка, точка отбора 2, Дизельное топливо'.
     Индексы колонок жёстко привязаны к структуре выданного файла
     (см. заголовки листа) — если структура файла изменится, пересчитать."""
-    import openpyxl
+    import openpyxl  # type: ignore[import-untyped]
 
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb["Лист1"]
@@ -445,9 +447,9 @@ def load_latest_lims_godt(path: str) -> dict[str, tuple[_dt | None, float | None
             d, v = row[dc], row[vc]
             if (
                 isinstance(d, _dt) and v is not None and
-                best_date is None or d > best_date
+                (best_date is None or d > best_date)
             ):
-                    best_date, best_val = d, v
+                best_date, best_val = d, v
         result[name] = (best_date, best_val)
     return result
 
@@ -455,7 +457,7 @@ def load_latest_lims_godt(path: str) -> dict[str, tuple[_dt | None, float | None
 def load_latest_pak_sulfur_d15(path: str) -> dict[str, tuple[_dt | None, float | None]]:
     """Читает лист ПАК (24-2000:Mg.Sulfur, 24-2000:D15) и возвращает
     последние по времени показания поточных анализаторов."""
-    import openpyxl
+    import openpyxl  # type: ignore[import-untyped]
 
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb["Лист1"]
@@ -468,19 +470,19 @@ def load_latest_pak_sulfur_d15(path: str) -> dict[str, tuple[_dt | None, float |
         if (
             isinstance(d0, _dt) and
             v0 is not None and
-            best_s_date is None or d0 > best_s_date
+            (best_s_date is None or d0 > best_s_date)
         ):
-                best_s_date, best_s_val = d0, v0
+            best_s_date, best_s_val = d0, v0
         if (
             isinstance(d1, _dt) and
             v1 is not None and
-            best_d_date is None or d1 > best_d_date
+            (best_d_date is None or d1 > best_d_date)
         ):
-                best_d_date, best_d_val = d1, v1
+            best_d_date, best_d_val = d1, v1
     return {"sulfur_ppm": (best_s_date, best_s_val), "D15": (best_d_date, best_d_val)}
 
 
-def load_telemetry_row_nearest(path: str, target_time: _dt) -> dict[str, float]:
+def load_telemetry_row_nearest(path: str, target_time: _dt) -> dict[str, Any]:
     """Читает avt_tags.csv / 242000_tags.csv и возвращает СТРОКУ тегов,
     ближайшую по времени к target_time (синхронизация по времени, а не
     по номеру строки — обязательное правило ТЗ). Служебные колонки
@@ -492,7 +494,11 @@ def load_telemetry_row_nearest(path: str, target_time: _dt) -> dict[str, float]:
     row = row.drop(labels=drop_cols)
     actual_time = row["date"]
     row = row.drop(labels=["date"])
-    return {"_actual_time": actual_time, **row.to_dict()}
+    
+    res: dict[str, Any] = {"_actual_time": actual_time}
+    for k, v in row.items():
+        res[str(k)] = v
+    return res
 
 
 if __name__ == "__main__":
@@ -528,6 +534,9 @@ if __name__ == "__main__":
 
     print(f"Источник серы для прогноза: {sulfur_source} = {sulfur_value} (уверенность {confidence})")
     print()
+
+    if lims_date is None:
+        raise ValueError("Дата из ЛИМС не найдена.")
 
     # --- синхронизация телеметрии ПО ВРЕМЕНИ к моменту лабораторного анализа ---
     avt_row = load_telemetry_row_nearest(AVT_TAGS_PATH, lims_date)
