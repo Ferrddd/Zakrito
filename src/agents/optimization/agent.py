@@ -488,13 +488,16 @@ def load_telemetry_row_nearest(path: str, target_time: _dt) -> dict[str, Any]:
     по номеру строки — обязательное правило ТЗ). Служебные колонки
     'Unnamed: ...' отбрасываются."""
     df = pd.read_csv(path, parse_dates=["date"])
-    idx = (df["date"] - target_time).abs().idxmin()
-    row = df.loc[idx]
+
+    # to_numpy().argmin() возвращает int, поэтому iloc[] не требует cast
+    idx = (df["date"] - target_time).abs().to_numpy().argmin()
+    row = df.iloc[idx]
+
     drop_cols = [c for c in df.columns if c.startswith("Unnamed")]
     row = row.drop(labels=drop_cols)
     actual_time = row["date"]
     row = row.drop(labels=["date"])
-    
+
     res: dict[str, Any] = {"_actual_time": actual_time}
     for k, v in row.items():
         res[str(k)] = v
