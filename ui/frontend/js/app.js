@@ -5,6 +5,8 @@ import { AgentDashboards } from './components/dashboards.js';
 const graph = new AgentGraph('.agent_tracer');
 const dashboards = new AgentDashboards('.dashbords');
 
+
+
 //функции динамического обновления DOM на основе JSON
 
 function updateOrchestrator(decision) {
@@ -103,6 +105,22 @@ function updateTelemetry(inputState) {
 //подписываем на шину событий
 eventBus.on('data:orchestrator', updateOrchestrator);
 eventBus.on('data:telemetry', updateTelemetry);
+function restore_from_localstorage() {
+    try {
+        const  savedData = localStorage.getItem('json_from_server')
+        if (savedData) {
+            const payload = JSON.parse(savedData)
+            if (payload.agents_trace) eventBus.emit('data:agents_trace', payload.agents_trace);
+            if (payload.orchestrator_decision) eventBus.emit('data:orchestrator', payload.orchestrator_decision);
+            if (payload.input_state) eventBus.emit('data:telemetry', payload.input_state);
+            if (payload.agent_statistics) eventBus.emit('data:statistics', payload.agent_statistics);
+            console.log('Состояние восстановлено из localStorage');
+        }
+    } catch(err) {
+        console.log('Ошибка изъятия данных из localstorage', err);
+    }
+}
+restore_from_localstorage();
 
 //подключение WebSocket к локальному серверу
 const ws = new WebSocket(`ws://${window.location.host}`);
@@ -110,7 +128,17 @@ const ws = new WebSocket(`ws://${window.location.host}`);
 ws.onmessage = (event) => {
     try {
         const payload = JSON.parse(event.data);
-        
+        let current_data_state = {};
+        const saved = localStorage.getItem('json_from_server');
+        if (saved) {
+            current_data_state = JSON.parse(saved);
+        }
+        if (payload.agents_trace) current_data_state.agents_trace = payload.agents_trace;
+        if (payload.orchestrator_decision) current_data_state.orchestrator_decision = payload.orchestrator_decision;
+        if (payload.input_state) current_data_state.input_state = payload.input_state;
+        if (payload.agent_statistics) current_data_state.agent_statistics = payload.agent_statistics;
+
+        localStorage.setItem('json_from_server',JSON.stringify(current_data_state));
         //разделяем JSON
         if (payload.agents_trace) eventBus.emit('data:agents_trace', payload.agents_trace);
         if (payload.orchestrator_decision) eventBus.emit('data:orchestrator', payload.orchestrator_decision);

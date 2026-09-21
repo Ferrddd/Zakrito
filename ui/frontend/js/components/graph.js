@@ -39,7 +39,7 @@ export class AgentGraph {
         
         // Настройки физики и внешнего вида графа
         const options = {
-            nodes: { shape: 'dot', size: 20, font: { size: 14, color: '#333' } },
+            nodes: { shape: 'dot', size: 20, font: { size: 14, color: '#ffffff' } },
             edges: { arrows: 'to', font: { align: 'top', size: 12 } },
             physics: { enabled: true, solver: 'repulsion' },
             interaction: { hover: true, tooltipDelay: 0 } 
