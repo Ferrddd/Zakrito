@@ -31,12 +31,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from itertools import product
-from typing import Callable, Dict, List, Optional, Tuple
-import copy
-import random
-
 
 # ---------------------------------------------------------------------------
 # 1. Управляемые параметры (action space)
@@ -54,11 +51,11 @@ class ControlVar:
     delta_pct: float = 0.05          # допустимый шаг изменения за один цикл
     bound_pct: float = 0.15          # допустимый общий диапазон от текущего значения
     is_hard_bounded: bool = False    # True, если bounds подтверждены техрегламентом
-    hard_bounds: Optional[Tuple[float, float]] = None
+    hard_bounds: tuple[float, float] | None = None
 
 
 # Реестр кандидатных управляющих воздействий (сведён из листа КИП).
-CONTROL_REGISTRY: Dict[str, ControlVar] = {
+CONTROL_REGISTRY: dict[str, ControlVar] = {
     # --- АВТ, колонна К-1/К-2 ---
     "F65": ControlVar("F65", "Производительность К-2 по отбензиненной нефти (загрузка АВТ)", "т/ч", bound_pct=0.10),
     "F30": ControlVar("F30", "Расход фракции 290-350°C с установки (точка отбора ДТ)", "т/ч"),
@@ -88,39 +85,39 @@ CONTROL_REGISTRY: Dict[str, ControlVar] = {
 # и возвращает прогнозное значение показателя. Формулы скопированы из ВАК
 # без изменений (только синтаксис Python).
 
-def vak_godt_T90(x: Dict[str, float]) -> float:
+def vak_godt_T90(x: dict[str, float]) -> float:
     return (162.998 + 0.12945 * x["T12"] + 59.57 * x["F15"] + 0.00036 * x["W7"]
             + x["T23"] * 0.26366 - 424.72638 * x["F1"] / x["F26"])
 
-def vak_godt_T50(x: Dict[str, float]) -> float:
+def vak_godt_T50(x: dict[str, float]) -> float:
     return 44.625 + 10.0224 * x["P13"] + 0.06981 * x["F9"] + 0.8052 * x["T6"]
 
-def vak_godt_I250(x: Dict[str, float]) -> float:
+def vak_godt_I250(x: dict[str, float]) -> float:
     return (84.585 - 0.21172 * x["T5"] + 0.12137 * x["T11"] - 0.00014 * x["F25"]
             + 0.56248 * x["F14"] - 0.16317 * x["T23"] + 0.20272 * x["T16"])
 
-def vak_godt_D15(x: Dict[str, float]) -> float:
+def vak_godt_D15(x: dict[str, float]) -> float:
     # использует лаговое лабораторное значение как признак (запаздывание ЛИМС)
     return 667.881 + 0.15417 * x["LIMS_D15"] + 0.00005 * x["F22"] + 0.10774 * x["T11"]
 
-def vak_godt_cloud_point(x: Dict[str, float]) -> float:
+def vak_godt_cloud_point(x: dict[str, float]) -> float:
     return (x["F22"] + 0.0021 * x["W7"] + 0.00008 * x["F25"] - 0.30656 * x["F1"]
             + 0.12018 * x["T6"] + 0.01916 * x["F9"] - 48.254 - 0.05249 * x["T16"])
 
-def vak_godt_T95(x: Dict[str, float]) -> float:
+def vak_godt_T95(x: dict[str, float]) -> float:
     return 0.03814 * x["F9"] - 9.201 - 0.00002 * x["F2"] + 0.62259 * x["T6"] + 0.48321 * x["LIMS_T95"]
 
-def vak_godt_CFPP(x: Dict[str, float]) -> float:
+def vak_godt_CFPP(x: dict[str, float]) -> float:
     return (0.22088 * x["T6"] - 102.375 - 47.75834 * x["P8"] + 0.03862 * x["F9"]
             + 43.60207 * x["W7"] + 43.81849 * x["P24"])
 
-def vak_godt_IBP(x: Dict[str, float]) -> float:
+def vak_godt_IBP(x: dict[str, float]) -> float:
     return (137.762 - 0.0653 * x["F26"] + 0.00011 * x["F22"] + 5.78137 * x["P13"]
             - 34.58028 * x["P24"] - 0.00993 * x["F14"] - 0.99962 * x["W4"]
             + 0.32232 * x["T23"] - 0.09406 * x["T16"])
 
 
-VAK_GODT_MODELS: Dict[str, Callable[[Dict[str, float]], float]] = {
+VAK_GODT_MODELS: dict[str, Callable[[dict[str, float]], float]] = {
     "T90": vak_godt_T90,
     "T50": vak_godt_T50,
     "I250": vak_godt_I250,
@@ -139,9 +136,9 @@ VAK_GODT_MODELS: Dict[str, Callable[[Dict[str, float]], float]] = {
 @dataclass
 class Spec:
     sulfur_max_ppm: float = 10.0
-    cfpp_max_c: Optional[float] = None          # подставить из выданной спецификации
-    cloud_point_max_c: Optional[float] = None   # подставить из выданной спецификации
-    t90_max_c: Optional[float] = None
+    cfpp_max_c: float | None = None          # подставить из выданной спецификации
+    cloud_point_max_c: float | None = None   # подставить из выданной спецификации
+    t90_max_c: float | None = None
     blend_fraction_sum_tol: float = 1e-3        # сумма долей блендинга = 100% ± tol
 
 
@@ -151,20 +148,20 @@ class Spec:
 
 @dataclass
 class Scenario:
-    deltas: Dict[str, float]                # {tag: новое значение управляемого параметра}
-    predicted_quality: Dict[str, float] = field(default_factory=dict)
-    objectives: Dict[str, float] = field(default_factory=dict)   # цели для Парето (минимизация)
+    deltas: dict[str, float]                # {tag: новое значение управляемого параметра}
+    predicted_quality: dict[str, float] = field(default_factory=dict)
+    objectives: dict[str, float] = field(default_factory=dict)   # цели для Парето (минимизация)
     feasible: bool = True
-    violations: List[str] = field(default_factory=list)
+    violations: list[str] = field(default_factory=list)
 
 
 @dataclass
 class OptimizationInput:
-    current_state: Dict[str, float]                     # текущие значения ВСЕХ тегов (control+context)
-    quality_forecast: Dict[str, Dict[str, float]]        # от агента качества: {"sulfur_ppm": {"pred":.., "confidence":..}, ...}
-    reliability_assessment: Dict[str, object]            # от агента надёжности: {"risk_level":.., "hard_constraints": {...}}
+    current_state: dict[str, float]                     # текущие значения ВСЕХ тегов (control+context)
+    quality_forecast: dict[str, dict[str, float]]        # от агента качества: {"sulfur_ppm": {"pred":.., "confidence":..}, ...}
+    reliability_assessment: dict[str, object]            # от агента надёжности: {"risk_level":.., "hard_constraints": {...}}
     spec: Spec
-    objective_weights: Dict[str, float] = field(
+    objective_weights: dict[str, float] = field(
         default_factory=lambda: {"quality_risk": 0.4, "throughput": 0.2, "energy": 0.2, "reliability_risk": 0.2}
     )
 
@@ -173,8 +170,8 @@ class OptimizationInput:
 # 5. Генерация сценариев
 # ---------------------------------------------------------------------------
 
-def generate_scenarios(opt_input: OptimizationInput, controls: Optional[List[str]] = None,
-                        n_steps: int = 3) -> List[Scenario]:
+def generate_scenarios(opt_input: OptimizationInput, controls: list[str] | None = None,
+                        n_steps: int = 3) -> list[Scenario]:
     """
     Строит сетку сценариев: для каждого управляемого тега берём n_steps точек
     в пределах допустимого шага delta_pct (не всего диапазона bound_pct —
@@ -187,7 +184,7 @@ def generate_scenarios(opt_input: OptimizationInput, controls: Optional[List[str
     controls = controls or list(CONTROL_REGISTRY.keys())
     state = opt_input.current_state
 
-    per_tag_options: Dict[str, List[float]] = {}
+    per_tag_options: dict[str, list[float]] = {}
     for tag in controls:
         cv = CONTROL_REGISTRY[tag]
         current = state.get(tag)
@@ -200,7 +197,7 @@ def generate_scenarios(opt_input: OptimizationInput, controls: Optional[List[str
             options = [max(lo, min(hi, v)) for v in options]
         per_tag_options[tag] = sorted(set(options))
 
-    scenarios: List[Scenario] = []
+    scenarios: list[Scenario] = []
     # 1) базовый сценарий "ничего не менять" (обязателен — устойчивый режим)
     scenarios.append(Scenario(deltas={tag: state[tag] for tag in per_tag_options}))
 
@@ -245,7 +242,7 @@ def evaluate_scenario(scn: Scenario, opt_input: OptimizationInput) -> Scenario:
             # это должно логироваться агентом как "недостаточно данных для этого показателя"
             continue
 
-    violations: List[str] = []
+    violations: list[str] = []
 
     # --- сера: жёсткое ограничение, источник — прогноз агента качества (ЛИМС/ПАК), не ВАК ---
     sulfur_pred = opt_input.quality_forecast.get("sulfur_ppm", {}).get("pred")
@@ -253,14 +250,23 @@ def evaluate_scenario(scn: Scenario, opt_input: OptimizationInput) -> Scenario:
         violations.append(f"sulfur_ppm={sulfur_pred:.2f} > {opt_input.spec.sulfur_max_ppm}")
 
     # --- прочие показатели качества, если спецификация задана ---
-    if opt_input.spec.cfpp_max_c is not None and "CFPP" in scn.predicted_quality:
-        if scn.predicted_quality["CFPP"] > opt_input.spec.cfpp_max_c:
+    if (
+        opt_input.spec.cfpp_max_c is not None and
+        "CFPP" in scn.predicted_quality and
+        scn.predicted_quality["CFPP"] > opt_input.spec.cfpp_max_c
+    ):
             violations.append(f"CFPP={scn.predicted_quality['CFPP']:.1f} > {opt_input.spec.cfpp_max_c}")
-    if opt_input.spec.cloud_point_max_c is not None and "CloudPoint" in scn.predicted_quality:
-        if scn.predicted_quality["CloudPoint"] > opt_input.spec.cloud_point_max_c:
+    if (
+        opt_input.spec.cloud_point_max_c is not None and 
+        "CloudPoint" in scn.predicted_quality and
+        scn.predicted_quality["CloudPoint"] > opt_input.spec.cloud_point_max_c
+    ):
             violations.append(f"CloudPoint={scn.predicted_quality['CloudPoint']:.1f} > {opt_input.spec.cloud_point_max_c}")
-    if opt_input.spec.t90_max_c is not None and "T90" in scn.predicted_quality:
-        if scn.predicted_quality["T90"] > opt_input.spec.t90_max_c:
+    if (
+        opt_input.spec.t90_max_c is not None and
+        "T90" in scn.predicted_quality and
+        scn.predicted_quality["T90"] > opt_input.spec.t90_max_c
+    ):
             violations.append(f"T90={scn.predicted_quality['T90']:.1f} > {opt_input.spec.t90_max_c}")
 
     # --- жёсткие ограничения от агента надёжности (например, предельная загрузка) ---
@@ -318,7 +324,7 @@ def evaluate_scenario(scn: Scenario, opt_input: OptimizationInput) -> Scenario:
 # 7. Парето-фронт (non-dominated sorting)
 # ---------------------------------------------------------------------------
 
-def dominates(a: Dict[str, float], b: Dict[str, float]) -> bool:
+def dominates(a: dict[str, float], b: dict[str, float]) -> bool:
     """a доминирует b, если a не хуже по всем целям и строго лучше хотя бы по одной.
     Все цели трактуются как МИНИМИЗАЦИЯ (см. evaluate_scenario)."""
     keys = a.keys()
@@ -327,19 +333,19 @@ def dominates(a: Dict[str, float], b: Dict[str, float]) -> bool:
     return not_worse and strictly_better
 
 
-def pareto_front(scenarios: List[Scenario]) -> List[Scenario]:
+def pareto_front(scenarios: list[Scenario]) -> list[Scenario]:
     """Возвращает недоминируемое множество среди ДОПУСТИМЫХ сценариев.
     Жёсткие ограничения отфильтрованы ДО построения фронта — это ключевое
     требование ТЗ: качество/безопасность нельзя компенсировать другими метриками."""
     feasible = [s for s in scenarios if s.feasible]
-    front: List[Scenario] = []
+    front: list[Scenario] = []
     for s in feasible:
         if not any(dominates(other.objectives, s.objectives) for other in feasible if other is not s):
             front.append(s)
     return front
 
 
-def pick_recommendation(front: List[Scenario], weights: Dict[str, float]) -> Optional[Scenario]:
+def pick_recommendation(front: list[Scenario], weights: dict[str, float]) -> Scenario | None:
     """Из Парето-фронта выбирает одно решение через взвешенную сумму
     (простой tie-break для оператора; сам фронт при этом показывается целиком,
     чтобы оператор мог выбрать альтернативу)."""
@@ -358,15 +364,15 @@ def pick_recommendation(front: List[Scenario], weights: Dict[str, float]) -> Opt
 
 @dataclass
 class OptimizationResult:
-    all_scenarios: List[Scenario]
-    feasible_scenarios: List[Scenario]
-    pareto_front: List[Scenario]
-    recommendation: Optional[Scenario]
+    all_scenarios: list[Scenario]
+    feasible_scenarios: list[Scenario]
+    pareto_front: list[Scenario]
+    recommendation: Scenario | None
     message: str
 
 
 def run_optimization_agent(opt_input: OptimizationInput,
-                            controls: Optional[List[str]] = None) -> OptimizationResult:
+                            controls: list[str] | None = None) -> OptimizationResult:
     raw_scenarios = generate_scenarios(opt_input, controls=controls)
     evaluated = [evaluate_scenario(s, opt_input) for s in raw_scenarios]
     feasible = [s for s in evaluated if s.feasible]
@@ -405,10 +411,11 @@ def run_optimization_agent(opt_input: OptimizationInput,
 # поэтому коллизий имён тегов между установками здесь не возникает.
 
 from datetime import datetime as _dt
+
 import pandas as pd  # используется только в загрузчиках телеметрии ниже
 
 
-def load_latest_lims_godt(path: str) -> Dict[str, Tuple[Optional[_dt], Optional[float]]]:
+def load_latest_lims_godt(path: str) -> dict[str, tuple[_dt | None, float | None]]:
     """Читает лист ЛИМС и возвращает последние (по дате) значения показателей
     качества для точки 'Гидроочистка, точка отбора 2, Дизельное топливо'.
     Индексы колонок жёстко привязаны к структуре выданного файла
@@ -431,19 +438,21 @@ def load_latest_lims_godt(path: str) -> Dict[str, Tuple[Optional[_dt], Optional[
         "T90": (104, 105),
     }
 
-    result: Dict[str, Tuple[Optional[_dt], Optional[float]]] = {}
+    result: dict[str, tuple[_dt | None, float | None]] = {}
     for name, (dc, vc) in targets.items():
         best_date, best_val = None, None
         for row in ws.iter_rows(min_row=4, values_only=True):
             d, v = row[dc], row[vc]
-            if isinstance(d, _dt) and v is not None:
-                if best_date is None or d > best_date:
+            if (
+                isinstance(d, _dt) and v is not None and
+                best_date is None or d > best_date
+            ):
                     best_date, best_val = d, v
         result[name] = (best_date, best_val)
     return result
 
 
-def load_latest_pak_sulfur_d15(path: str) -> Dict[str, Tuple[Optional[_dt], Optional[float]]]:
+def load_latest_pak_sulfur_d15(path: str) -> dict[str, tuple[_dt | None, float | None]]:
     """Читает лист ПАК (24-2000:Mg.Sulfur, 24-2000:D15) и возвращает
     последние по времени показания поточных анализаторов."""
     import openpyxl
@@ -456,16 +465,22 @@ def load_latest_pak_sulfur_d15(path: str) -> Dict[str, Tuple[Optional[_dt], Opti
     for row in ws.iter_rows(min_row=3, values_only=True):
         d0, v0 = row[0], row[1]
         d1, v1 = row[3], row[4]
-        if isinstance(d0, _dt) and v0 is not None:
-            if best_s_date is None or d0 > best_s_date:
+        if (
+            isinstance(d0, _dt) and
+            v0 is not None and
+            best_s_date is None or d0 > best_s_date
+        ):
                 best_s_date, best_s_val = d0, v0
-        if isinstance(d1, _dt) and v1 is not None:
-            if best_d_date is None or d1 > best_d_date:
+        if (
+            isinstance(d1, _dt) and
+            v1 is not None and
+            best_d_date is None or d1 > best_d_date
+        ):
                 best_d_date, best_d_val = d1, v1
     return {"sulfur_ppm": (best_s_date, best_s_val), "D15": (best_d_date, best_d_val)}
 
 
-def load_telemetry_row_nearest(path: str, target_time: _dt) -> Dict[str, float]:
+def load_telemetry_row_nearest(path: str, target_time: _dt) -> dict[str, float]:
     """Читает avt_tags.csv / 242000_tags.csv и возвращает СТРОКУ тегов,
     ближайшую по времени к target_time (синхронизация по времени, а не
     по номеру строки — обязательное правило ТЗ). Служебные колонки
