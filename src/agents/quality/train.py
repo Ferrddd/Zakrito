@@ -1,22 +1,3 @@
-"""Обучение агента качества.
-
-Запуск:
-    python -m src.agents.quality.train --horizon 6 --skip-cv --force-rebuild
-
-Всё, что можно вынести из кода, вынесено в config.yaml (роли тегов, горизонты,
-лаги/окна, размеры сплитов, гиперпараметры LightGBM, пути артефактов) и в .env
-через DataPipelineSettings. Повторить обучение — значит передать тот же конфиг.
-
-Кэш датасета: build_dataset кэширует результат фиче-инжиниринга в
-data/converted/dataset_cache/h{H}_{mode}.parquet. Кэш не отслеживает изменения
-конфига и кода признаков — после любой правки передай --force-rebuild.
-
-Схема оценки честная в двух местах:
-- early stopping и порог тревоги подбираются на валидации (последние VAL_DAYS
-  train с эмбарго), а НЕ на holdout и не на train;
-- рядом с метриками модели считаются базлайны (медиана train и persistence
-  «сера сейчас»): без них MAE/PR-AUC ничего не значат.
-"""
 
 from __future__ import annotations
 

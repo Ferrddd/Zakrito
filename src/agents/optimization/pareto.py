@@ -1,4 +1,3 @@
-"""Парето-фронт и выбор рекомендации (логика исходного optim_agent)."""
 
 from __future__ import annotations
 

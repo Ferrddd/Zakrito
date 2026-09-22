@@ -1,5 +1,3 @@
-"""Оценка сценария: прогноз качества (ВАК), жёсткие ограничения, целевые функции
-(логика исходного optim_agent.evaluate_scenario)."""
 
 from __future__ import annotations
 
@@ -19,7 +17,7 @@ def _in_band(new: float, cur: float, ref: float, bound_pct: float) -> bool:
     if lo <= new <= hi:
         return True
     # текущее значение уже вне диапазона — разрешаем только движение к диапазону
-    clamp = lambda v: min(max(v, lo), hi)  # noqa: E731
+    clamp = lambda v: min(max(v, lo), hi)
     return abs(new - clamp(new)) < abs(cur - clamp(cur))
 
 

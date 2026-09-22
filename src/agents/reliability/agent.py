@@ -1,26 +1,3 @@
-"""Агент надёжности: тяжесть режима / риск для оборудования и катализатора.
-
-Прямой разметки износа, ΔP реактора и температуры слоя в пакете нет, поэтому
-индекс строится из ПРОКСИ-метрик (ТЗ п.3 это допускает при явных допущениях).
-Все пороги — ДОПУЩЕНИЯ эксперимента, подлежат согласованию с технологами.
-
-Компоненты (каждый 0..1; недоступный из-за нехватки данных — исключается из
-среднего и попадает в limiting_factors как ограничение оценки):
-
-* load    — загрузка по сырью относительно медианы истории (перегруз >15% -> 1);
-* temp    — T5 (Р-201, температура ГСС на выходе) как прокси WABT: превышение над
-            ожидаемым для текущей нагрузки (регрессия T5 ~ load_rel по истории), в σ;
-            рост температуры при той же нагрузке = компенсация дезактивации катализатора;
-* dp      — тренд F19 (Р-202, давление на входе) за последние часы как прокси роста
-            перепада давления/закоксовывания; нормируется на типичное 6-часовое
-            изменение по истории;
-* anomaly — доля каналов с |robust z| > z_threshold (как downtime_score в схеме).
-
-severity = 0.5 * взвешенное среднее + 0.5 * максимум компонентов: один сильно
-плохой признак не должен растворяться в остальных нормальных.
-Простой установки (расход < 10% медианы) -> downtime_flag и минимум warning.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -133,7 +110,7 @@ class ReliabilityAgent:
 
         b.dp_col = _find(df.columns, (cfg.dp_tag,))
         if b.dp_col:
-            steps = int(round(cfg.dp_trend_hours * 6))   # сетка 10 мин
+            steps = round(cfg.dp_trend_hours * 6)
             d = df[b.dp_col].where(valid_mask).diff(steps).dropna()
             if len(d) > 100 and _robust_scale(d) > _MIN_SCALE:
                 b.dp_sigma = _robust_scale(d)
@@ -155,7 +132,7 @@ class ReliabilityAgent:
         if col is None or col not in df.columns:
             return
         for ts, v in df[col].items():
-            self._push(pd.Timestamp(ts), None if pd.isna(v) else float(v))
+            self._push(pd.Timestamp(str(ts)), None if pd.isna(v) else float(v))
 
     # ------------------------------------------------------------------ оценка
     def assess(self, snapshot: ProcessSnapshot) -> ReliabilityAssessment:

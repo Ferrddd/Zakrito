@@ -1,25 +1,3 @@
-"""Динамическая модель нормального поведения (NBM) для ΔP реактора Р-202.
-
-Почему именно так (по итогам диагностики на реальных данных). Уровень W10 «гуляет» в разы
-между неделями (медианы по месяцам 0.8 ... 5.4) независимо от нагрузки и температур, а
-блоков между остановами всего 4 — то есть у ΔP есть скрытое состояние (слой, катализатор,
-байпасы, калибровка), которое по мгновенным признакам не восстановить. Модель «ΔP = f(режим)»
-на таких данных проигрывает даже константе.
-
-Поэтому модель авторегрессионная и мультипликативная: она берёт ΔP шесть часов назад
-(это и есть скрытое состояние) и предсказывает, во сколько раз ΔP изменится сейчас из-за
-изменения режима за эти же шесть часов (нагрузка, температуры, давление, квенч, ВСГ):
-
-    ΔP(t) ≈ ΔP(t-L) * exp( f(признаки(t), признаки(t) - признаки(t-L)) )
-
-f = линейная часть (Ridge, экстраполирует на нагрузки вне диапазона обучения) + градиентный
-бустинг по её остатку (нелинейности). Остаток «факт / модель - 1» — это рост сопротивления,
-не объяснимый режимом: прямой прокси закоксовывания. При постоянном темпе роста r (доля/сут)
-остаток за лаг L равен r * L, поэтому темп восстанавливается как остаток * 24 / L.
-
-Модель НЕ видит время/возраст блока. Обучение — train.py, применение — agent.py.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -47,11 +25,6 @@ def resolve_column(tag_ids: str | list[str], columns: Any, suffixes: list[str]) 
 
 
 def mask_sentinels(df: pd.DataFrame, values: list[float] | tuple[float, ...], cols: list[str] | None = None) -> pd.DataFrame:
-    """Значения-маркеры «нет данных / обрыв канала» (напр. 307.0) -> NaN.
-
-    В сырой выгрузке КИП у большинства тегов max ровно 307.0 (см. historical_stats.csv) — это не
-    физическое значение. Без маски оно даёт огромный z-score и ложную «аномальность» тегов.
-    """
     if not values:
         return df
     out = df.copy()
@@ -71,11 +44,6 @@ def smooth_target(df: pd.DataFrame, dp_col: str, roll: int) -> pd.Series:
 
 
 def build_features(df: pd.DataFrame, base_cols: list[str], dp_col: str, roll: int, lag: int) -> pd.DataFrame:
-    """Признаки на момент t: ΔP лаг назад (лог), значения режима и их изменение за лаг.
-
-    Только прошлое (скользящие окна назад, shift вперёд по времени) — утечки из будущего нет.
-    Считается по регулярной сетке (10 мин), как и витрина.
-    """
     dp_lag = smooth_target(df, dp_col, roll).shift(lag)
     out: dict[str, pd.Series] = {"log_dp_lag": np.log(dp_lag.clip(lower=EPS))}
     for c in base_cols:
@@ -86,8 +54,6 @@ def build_features(df: pd.DataFrame, base_cols: list[str], dp_col: str, roll: in
 
 
 class StackedRegressor:
-    """Линейная часть + бустинг по её остатку (предсказывает лог-отношение ΔP(t)/ΔP(t-L))."""
-
     def __init__(self, linear: Any, gbt: Any):
         self.linear = linear
         self.gbt = gbt
@@ -122,7 +88,6 @@ def make_regressor(params: dict[str, Any], n_estimators: int | None = None) -> A
 
 def fit_with_early_stopping(model: Any, Xtr: pd.DataFrame, ytr: np.ndarray,
                             Xval: pd.DataFrame, yval: np.ndarray, rounds: int) -> int:
-    """Обучает бустинг; возвращает число деревьев (best_iteration для LightGBM)."""
     try:
         import warnings
 

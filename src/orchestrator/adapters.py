@@ -1,5 +1,3 @@
-"""Переходники между контрактом агента качества (AgentReport) и общими схемами команды
-(agents_schemas.py: ProcessSnapshot / QualityAssessment / QualitySignal)."""
 
 from __future__ import annotations
 

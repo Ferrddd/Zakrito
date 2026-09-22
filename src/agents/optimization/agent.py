@@ -1,26 +1,23 @@
-"""Агент оптимизации: run_optimization_agent (логика исходного optim_agent) + адаптер под оркестратор.
 
-Что добавлено к исходной логике, чтобы агент работал в системе:
-* вход/выход по контрактам оркестратора (schemas.OptimizationInput -> list[contracts.Scenario]);
-* сера проверяется what-if'ом агента качества для КАЖДОГО сценария (bind_probe). Исходная проверка
-  сравнивала один и тот же прогноз со спецификацией для всех сценариев, и при p50 > 10 отсекала всё;
-* what-if — самое дорогое место, поэтому: сначала дешёвые проверки (диапазоны, надёжность, ВАК),
-  потом probe одиночных сдвигов, затем пар (в порядке ожидаемой пользы) в рамках max_probes;
-* сценарий «ничего не менять» не предлагается: оптимизатор вызывается, когда риск уже зафиксирован;
-* исправлено: веса «throughput»/«energy» в исходнике не совпадали с ключами целей
-  («throughput_loss»/«energy_proxy») и молча давали 0 — теперь учитываются.
-"""
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from src.agents.optimization.evaluation import constraint_report, evaluate_scenario
-from src.agents.optimization.pareto import pareto_front, pick_recommendation, weighted_score
-from src.agents.optimization.registry import CONTROL_REGISTRY, ControlVar, resolve_columns
+from src.agents.optimization.pareto import (
+    pareto_front,
+    pick_recommendation,
+    weighted_score,
+)
+from src.agents.optimization.registry import (
+    CONTROL_REGISTRY,
+    ControlVar,
+    resolve_columns,
+)
 from src.agents.optimization.scenarios import (
     OptimizerInput,
     Scenario,

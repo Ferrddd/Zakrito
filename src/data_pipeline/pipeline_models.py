@@ -7,12 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
  
  
 class DataPipelineSettings(BaseSettings):
-    """Пути и пороги пайплайна.
- 
-    Все относительные пути резолвятся от BASE_DIR (корень репозитория),
-    чтобы запуск не зависел от текущей директории — требование
-    воспроизводимости из ТЗ (п. 7).
-    """
+
  
     raw_data_path: Path = Path("data/raw")
     converted_data_path: Path = Path("data/converted")

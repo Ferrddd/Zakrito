@@ -164,7 +164,7 @@ class Orchestrator:
         rejected = [f"{c.scenario.name}: " + "; ".join(k.detail or k.name for k in c.checks if not k.passed)
                     for c in bad]
 
-        base = {
+        base: dict[str, Any] = {
             "trace_id": state.trace_id, "timestamp": state.timestamp, "problem": problem,
             "confidence": q_report.confidence, "data_freshness": self._freshness(q_report),
             "rejected": rejected, "warnings": self._warnings(q_report, rel),
@@ -323,3 +323,4 @@ class Orchestrator:
                   "recommendation": rec.model_dump(mode="json")}
         with self.audit_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            

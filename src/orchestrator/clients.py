@@ -1,5 +1,3 @@
-"""Клиент агента качества, поднятого как HTTP-сервис (src/agents/quality/api.py).
-Реализует тот же протокол Agent — оркестратору всё равно, in-process агент или удалённый."""
 
 from __future__ import annotations
 
