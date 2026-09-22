@@ -1,19 +1,4 @@
-"""HTTP-обёртка над QualityAgent (опционально).
 
-Оркестратору API НЕ обязателен: он может вызывать агент in-process
-(QualityAgent.load(...)). API нужен, если агент должен жить отдельным сервисом
-(демо «агенты как сервисы», другой язык/хост, отдельный деплой).
-
-Запуск:
-    uvicorn src.agents.quality.api:app --port 8001
-    QUALITY_CONFIG=src/agents/quality/config.yaml  — путь к конфигу (по умолчанию он же)
-
-Эндпоинты:
-    GET  /health         — жив ли сервис, какие горизонты загружены
-    GET  /capabilities   — контракт агента
-    POST /history        — прогрев буфера: список ProcessState (старые -> новые)
-    POST /evaluate       — {state, overrides?} -> AgentReport
-"""
 
 from __future__ import annotations
 

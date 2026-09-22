@@ -1,18 +1,3 @@
-"""Собирает FeatureConfig из config/quality_agent*.yaml + controllable_tags.yaml.
-
-controllable_tags.yaml здесь используется только как источник suffix'ов
-(installation -> column) для тегов, явно упомянутых по tag_id: monotone и
-чёрный список анализаторов серы. Список признаков модели сюда не входит —
-он строится динамически из всей телеметрии (см. features.raw_feature_candidates).
-
-ВАЖНО про имена колонок. loader.load_telemetry мерджит АВТ и 24-2000 с
-suffixes=("_avt", "_hdt"), а pandas добавляет суффикс ТОЛЬКО колонкам, которые
-есть в обоих файлах (T6, F9, T11, F14, F26 ...). Теги, которые есть только в
-24-2000 (T5, P24, W7, P13, W10 ...), остаются БЕЗ суффикса. Поэтому имя из
-resolve_column() ("T5_hdt") — лишь кандидат: реальное имя определяется
-resolve_cfg_columns() по фактическим колонкам датафрейма, и если колонки нет —
-это ошибка, а не тихий пропуск.
-"""
 
 from __future__ import annotations
 

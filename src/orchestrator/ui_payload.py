@@ -198,11 +198,19 @@ def build_payload(ctx: CycleContext, trend: TrendBuffer, directory: TagDirectory
          "confidence": 0.0 if "optimizer" in ctx.stubbed or not ctx.optimizer_called else None},
         {"id": "orchestrator", "status": "done", "confidence": rec.confidence},
     ]
-    sink = "optimization_agent" if ctx.optimizer_called else "orchestrator"
     forecast_tag = f"forecast_sulfur_{w.p50:.1f}" if w is not None else "forecast_none"
+    q_data = [forecast_tag]
+    r_data = [f"risk_class_{rel.risk_class.value}"]
+    called = ctx.optimizer_called
+    skipped = ["skipped"]                      # оптимизатор не вызывался в этом цикле, но связи в графе остаются
+    opt_out = ([f"scenarios_generated_{len(ctx.scenarios)}", f"scenarios_valid_{len(passed)}"]
+               if called else skipped)
     edges = [
-        {"from": "quality_agent", "to": sink, "data_passed": [forecast_tag]},
-        {"from": "reliability_agent", "to": sink, "data_passed": [f"risk_class_{rel.risk_class.value}"]},
+        {"from": "quality_agent", "to": "optimization_agent", "data_passed": q_data if called else skipped},
+        {"from": "reliability_agent", "to": "optimization_agent", "data_passed": r_data if called else skipped},
+        {"from": "optimization_agent", "to": "orchestrator", "data_passed": opt_out},
+        {"from": "quality_agent", "to": "orchestrator", "data_passed": q_data},
+        {"from": "reliability_agent", "to": "orchestrator", "data_passed": r_data},
     ]
     raw = {
         "quality_agent": {

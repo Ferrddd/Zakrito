@@ -1,9 +1,4 @@
-"""Контракт между оркестратором и агентами (вход: ProcessState, выход: AgentReport).
 
-ProcessState.tags — одна строка витрины telemetry_pac_lims.parquet: те же имена
-колонок, что видит обучение (телеметрия *_hdt/*_avt, таргет "24-2000:Mg.Sulfur"
-и его служебные колонки __bad / __frozen / __age_min).
-"""
 
 from __future__ import annotations
 

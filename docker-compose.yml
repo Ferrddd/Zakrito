@@ -1,0 +1,67 @@
+name: nk-mas
+
+x-env: &env
+  PYTHONUNBUFFERED: "1"
+  RAW_DATA_PATH: data/raw
+  CONVERTED_DATA_PATH: data/converted
+
+x-app: &app
+  build: { context: ., dockerfile: Dockerfile }
+  image: nk-mas:latest
+  volumes:
+    - ./data:/app/data        # сырые данные, витрина, модели, аудит-лог — вне образа
+
+services:
+  # 1) одноразовая подготовка: витрина + обучение (пропускается, если артефакты уже есть)
+  bootstrap:
+    <<: *app
+    command: ["bash", "scripts/bootstrap.sh"]
+    environment:
+      <<: *env
+      TRAIN_RELIABILITY: ${TRAIN_RELIABILITY:-1}
+      QUALITY_HORIZON: ${QUALITY_HORIZON-6}
+    restart: "no"
+
+  # 2) агент качества как сервис (состояние в памяти => строго 1 воркер)
+  quality-api:
+    <<: *app
+    command: ["uvicorn", "src.agents.quality.api:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]
+    environment:
+      <<: *env
+      QUALITY_CONFIG: src/agents/quality/config.yaml
+    depends_on:
+      bootstrap: { condition: service_completed_successfully }
+    ports: ["8001:8001"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  # 3) фронтенд
+  ui:
+    build: { context: ., dockerfile: Dockerfile.ui }
+    image: nk-mas-ui:latest
+    ports: ["3000:3000"]
+    restart: unless-stopped
+
+  # 4) оркестратор: проигрывает историю, дергает quality-api, шлёт результат в UI
+  orchestrator:
+    <<: *app
+    command:
+      - python
+      - -m
+      - scripts.run_orchestrator
+      - --start=${START:-2026-06-01}
+      - --steps=${STEPS:-500}
+      - --every=${EVERY:-6}
+      - --sleep=${SLEEP:-3}
+      - --remote=http://quality-api:8001
+      - --ui-url=${UI_URL:-http://ui:3000/api/update}
+    environment: *env
+    depends_on:
+      quality-api: { condition: service_healthy }
+      ui: { condition: service_started }
+    restart: "no"

@@ -1,21 +1,3 @@
-"""Обучение динамической модели нормального поведения ΔP (NBM) для агента надёжности.
-
-    python -m src.agents.reliability.train
-    python -m src.agents.reliability.train --config src/agents/reliability/config.yaml
-
-Что делает:
-  1. читает витрину data/converted/telemetry_pac_lims.parquet;
-  2. строит признаки: ΔP лаг назад (скрытое состояние) + режим и его изменение за лаг;
-  3. оставляет «рабочие» точки: установка в работе (и в момент t, и в t-лаг), не пуск,
-     измерения валидны, аномальных строк нет;
-  4. делит ПО ВРЕМЕНИ: holdout — последние holdout_size (зазор embargo), внутри train последние
-     val_frac идут на early stopping бустинга;
-  5. обучает Ridge + бустинг по остатку, печатает метрики НА HOLDOUT и сравнение с наивным
-     прогнозом «ΔP не изменился» (persistence): модель полезна, только если её MAE меньше;
-  6. считает σ относительного остатка на holdout (out-of-sample) — по ней агент переводит
-     остаток в z-score; переобучает на всей истории и сохраняет модель.
-"""
-
 from __future__ import annotations
 
 import argparse
