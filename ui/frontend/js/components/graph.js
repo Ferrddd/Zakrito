@@ -4,11 +4,8 @@ export class AgentGraph {
     constructor(containerSelector) {
         this.container = document.querySelector(containerSelector);
         this.rawEvaluations = {}; 
-        
-        
         this.nodes = new vis.DataSet([]);
         this.edges = new vis.DataSet([]);
-        
         this.createTooltip();
         this.initNetwork();
 
@@ -39,9 +36,22 @@ export class AgentGraph {
         
         // Настройки физики и внешнего вида графа
         const options = {
-            nodes: { shape: 'dot', size: 20, font: { size: 14, color: '#333' } },
-            edges: { arrows: 'to', font: { align: 'top', size: 12 } },
-            physics: { enabled: true, solver: 'repulsion' },
+            nodes: { shape: 'dot', size: 20, font: { size: 14, color: '#ffffff' } },
+            edges: { arrows: 'to', font: { align: 'top', size: 14 }, width: 2,
+            smooth: {
+                enabled: true,
+                type: 'cubicBezier',
+                forceDirection: 'horizontal',
+                roundness: 0.4
+            }
+        },
+            physics: { enabled: true, solver: 'repulsion',
+                forceAtlas2Based: {
+                    gravitationalConstant: -80,
+                    springLength: 140,
+                    avoidOverlap: 1
+                }
+            },
             interaction: { hover: true, tooltipDelay: 0 } 
         };
         
@@ -69,12 +79,18 @@ export class AgentGraph {
         this.rawEvaluations = traceData.raw_evaluations || {};
 
         
-        const updatedNodes = traceData.nodes.map(node => ({
-            id: node.id,
-            label: node.id,
-            
-            color: node.status === 'done' ? '#10b981' : '#f59e0b' 
-        }));
+        const updatedNodes = traceData.nodes.map(node => {
+            const itsOrchestrator = node.id === 'orchestrator' || node.id.includes('orchestrator');
+
+            return {
+                id: node.id,
+                label: node.id,
+                size: itsOrchestrator ? 30 : 20, 
+                color: itsOrchestrator 
+                    ? '#8b5cf6' 
+                    : (node.status === 'done' ? '#10b981' : '#f59e0b')
+            };
+        });
         this.nodes.update(updatedNodes);
 
          
